@@ -132,6 +132,9 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .modalCard p{margin:0;color:var(--muted)}
 .modalCard .go{justify-self:end}
 #signWork{display:grid;gap:10px}
+.lock{border-color:var(--accent)}
+.lock p{margin:0}
+.lock input{flex:1 1 200px;min-width:0;font:15px var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px}
 @media (max-width:420px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.f.w2{grid-column:1/-1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -169,6 +172,15 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
     <h1 id="toolTitle"></h1>
   </div>
   <div id="makeView" class="view" hidden>
+    <section class="lock" id="lockCard" hidden>
+      <div class="sechead"><span class="label">Unlock the shared log</span></div>
+      <p class="hint">Type the dispatch passcode once on this device. It keeps rate con numbers and load info private to your team.</p>
+      <form class="row" id="lockForm" autocomplete="off">
+        <input type="password" id="lockInput" placeholder="Passcode" aria-label="Passcode">
+        <button class="go small" type="submit">Unlock</button>
+      </form>
+      <div class="status warn" id="lockErr" hidden></div>
+    </section>
     <div class="make">
       <div class="col-in">
         <section>
@@ -481,12 +493,26 @@ function setLog(rows){
   if (recent.length) last = { week: Number(recent[0].week), load: Number(recent[0].load), date: recent[0].date };
   renderLog(); refresh();
 }
+// Shared log in Google Sheets, locked with the dispatch passcode.
+function getKey(){ try { return localStorage.getItem("zbt_key") || ""; } catch (e) { return ""; } }
+function setKey(k){ try { localStorage.setItem("zbt_key", k); } catch (e) {} }
+async function callLog(body){
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ ...body, key: getKey() }) });
+  return r.json();
+}
+function showLock(msg){
+  $("lockCard").hidden = false; $("lockErr").textContent = msg || ""; $("lockErr").hidden = !msg;
+  $("nextNum").textContent = "locked";
+}
 async function loadLog(){
   try {
-    const r = await fetch(API + "?action=log");
-    const j = await r.json();
+    let j = await callLog({ action: "log" });
+    if (!j.ok && /unknown action/i.test(j.error || "")) {          // log script not updated yet: old way
+      j = await (await fetch(API + "?action=log")).json();
+    }
+    if (!j.ok && j.error === "locked") { showLock(getKey() ? "That passcode didn't work. Check it with your team." : ""); return; }
     if (!j.ok) throw new Error(j.error || "unknown error");
-    setLog(j.log);
+    $("lockCard").hidden = true; setLog(j.log);
   } catch (e) { showStatus("Couldn't read the shared log: " + e.message + ". Numbers may be off.", "warn"); }
 }
 
@@ -513,8 +539,8 @@ $("go").addEventListener("click", async () => {
   const [wk, ld] = v.number.split(".");
   const rec = { number: v.number, week: Number(wk), load: Number(ld) || 0, date: iso(new Date()), cons: v.cons, po: v.po, ts: Date.now() };
   try {
-    const r = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "add", rec }) });
-    const j = await r.json();
+    const j = await callLog({ action: "add", rec });
+    if (!j.ok && j.error === "locked") { showLock("Enter the passcode, then save again so this load gets logged."); throw new Error("the log is locked"); }
     if (!j.ok) throw new Error(j.error || "unknown error");
     setLog(j.log); showStatus("Saved RateCon_" + v.number + ".pdf and added it to the shared log.", "ok");
   } catch (e) {
@@ -548,7 +574,11 @@ document.addEventListener("keydown", e => {
 });
 
 refresh(); renderLog();
-loadLog(); setInterval(loadLog, 60000);
+$("lockForm").addEventListener("submit", async e => {
+  e.preventDefault(); const k = $("lockInput").value.trim(); if (!k) return;
+  setKey(k); $("lockInput").value = ""; await loadLog();
+});
+loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
 </script>
 
 

@@ -1,21 +1,24 @@
-// ZBT Rate Con Maker — shared log in the "Log" tab of this Google Sheet.
-// The website lives on GitHub Pages and talks to this script:
-//   GET  ...exec?action=log  -> recent rate cons (newest first)
-//   POST ...exec  {action:"add", rec:{...}} -> adds one, returns the log
-// Opening ...exec with no action still shows the old built-in page.
+// ZBT Dispatch Tools — shared rate con log in the "Log" tab of this Google Sheet.
+// The website (GitHub Pages) talks to this script with POST requests that must carry the passcode.
+
+// >>> Put your passcode between the quotes. Use 8+ characters. Everyone types this once per device. <<<
+const PASSCODE = 'CHANGE-ME';
+
 const LOG_TAB = 'Log';
 
-function doGet(e) {
-  if (e && e.parameter && e.parameter.action === 'log') return json_({ ok: true, log: getLog() });
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('ZBT Rate Con Maker')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+function doGet() {
+  return ContentService.createTextOutput('ZBT Dispatch Tools log. Nothing to see here.');
 }
 
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
-    if (body.action === 'add') return json_({ ok: true, log: addEntry(body.rec) });
+    if (PASSCODE === 'CHANGE-ME' || String(body.key || '') !== PASSCODE) {
+      Utilities.sleep(800);                      // slows down anyone guessing
+      return json_({ ok: false, error: 'locked' });
+    }
+    if (body.action === 'log') return json_({ ok: true, log: getLog_() });
+    if (body.action === 'add') return json_({ ok: true, log: addEntry_(body.rec || {}) });
     return json_({ ok: false, error: 'Unknown action' });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -46,7 +49,7 @@ function asDate_(v) {
   return String(v);
 }
 
-function getLog() {
+function getLog_() {
   const rows = logSheet_().getDataRange().getValues().slice(1).filter(r => r[0] !== '');
   return rows.map(r => ({
     number: String(r[0]), week: Number(r[1]), load: Number(r[2]), date: asDate_(r[3]),
@@ -54,14 +57,14 @@ function getLog() {
   })).reverse().slice(0, 200);
 }
 
-function addEntry(rec) {
+function addEntry_(rec) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    logSheet_().appendRow([String(rec.number), Number(rec.week), Number(rec.load), String(rec.date),
-      String(rec.cons || '').slice(0, 300), String(rec.po || '').slice(0, 60), new Date()]);
+    logSheet_().appendRow([String(rec.number || '').slice(0, 20), Number(rec.week) || 0, Number(rec.load) || 0,
+      String(rec.date || '').slice(0, 10), String(rec.cons || '').slice(0, 300), String(rec.po || '').slice(0, 60), new Date()]);
   } finally {
     lock.releaseLock();
   }
-  return getLog();
+  return getLog_();
 }
