@@ -132,6 +132,23 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .modalCard p{margin:0;color:var(--muted)}
 .modalCard .go{justify-self:end}
 #signWork{display:grid;gap:10px}
+.hdrRight{display:flex;align-items:center;gap:14px}
+.lockBtn{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);cursor:pointer;transition:background .2s,color .2s,border-color .2s}
+.lockBtn:hover{border-color:var(--accent)}
+.lockBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lockBtn svg{width:22px;height:22px;overflow:visible}
+.lockBtn .shackle{transform-origin:16px 11px;transition:transform .35s cubic-bezier(.34,1.56,.64,1)}
+.lockBtn .keyhole{fill:var(--panel);transition:fill .2s}
+.lockBtn.open .shackle{transform:translateY(-3px) rotate(28deg)}
+.lockBtn.closed{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.lockBtn.closed .keyhole{fill:var(--accent)}
+.lockBtn.closed .shackle{transform:none}
+.lockBtn.snap{animation:snap .45s ease}
+@keyframes snap{0%{transform:scale(1)}35%{transform:scale(.86)}65%{transform:scale(1.1)}100%{transform:scale(1)}}
+.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top, 0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast.show{animation:toastIn .25s ease}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){.lockBtn .shackle{transition:none}.lockBtn.snap,.toast.show{animation:none}}
 .lock{border-color:var(--accent)}
 .lock.jiggle{animation:jiggle .55s cubic-bezier(.36,.07,.19,.97) both}
 @keyframes jiggle{
@@ -154,8 +171,18 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 <div class="wrap">
   <header class="brand">
     <a href="#" class="brandlink" id="homeLink"><img id="brandLogo" alt="" width="44" height="44"><span><b>Z Brothers Trucking</b><small>Dispatch Tools</small></span></a>
-    <div class="next" id="nextWrap" hidden>Next number: <b id="nextNum">…</b></div>
+    <div class="hdrRight">
+      <div class="next" id="nextWrap" hidden>Next number: <b id="nextNum">…</b></div>
+      <button type="button" class="lockBtn open" id="lockBtn" aria-label="Lock the shared log" title="Lock the shared log">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="shackle" d="M8 11V7.5a4 4 0 0 1 8 0V11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <rect x="5" y="11" width="14" height="10" rx="2.2" fill="currentColor"/>
+          <circle class="keyhole" cx="12" cy="15.6" r="1.5"/>
+        </svg>
+      </button>
+    </div>
   </header>
+  <div class="toast" id="toast" role="status" hidden></div>
 
   <div id="homeView" class="view">
     <div class="hero">
@@ -517,7 +544,23 @@ function jiggle(){
   input.classList.add("bad"); input.select();
   setTimeout(() => input.classList.remove("bad"), 1200);
 }
+function setLockIcon(locked){
+  const b = $("lockBtn"); if (!b) return;
+  b.classList.toggle("open", !locked); b.classList.toggle("closed", locked);
+  b.setAttribute("aria-label", locked ? "Log is locked. Click to unlock." : "Lock the shared log");
+  b.title = locked ? "Locked. Click to unlock" : "Lock the shared log";
+}
+let toastTimer = null;
+function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600); }
+function lockNow(){
+  setKey(""); recent = [];
+  const ul = $("log"); ul.textContent = ""; const li = document.createElement("li"); const sp = document.createElement("span"); sp.textContent = "Locked"; li.append(sp); ul.append(li);
+  const b = $("lockBtn"); b.classList.remove("snap"); void b.offsetWidth; b.classList.add("snap");
+  showLock("");
+  toast(location.hash === "#builder" ? "Locked. Enter the passcode to unlock." : "Locked. Unlock it from the Rate Confirmation Builder.");
+}
 function showLock(msg){
+  setLockIcon(true);
   $("lockCard").hidden = false; $("lockErr").textContent = msg || ""; $("lockErr").hidden = !msg;
   $("nextNum").textContent = "locked";
 }
@@ -529,7 +572,7 @@ async function loadLog(){
     }
     if (!j.ok && j.error === "locked") { showLock(getKey() ? "That passcode didn't work. Check it with your team." : ""); if (getKey()) jiggle(); return; }
     if (!j.ok) throw new Error(j.error || "unknown error");
-    $("lockCard").hidden = true; setLog(j.log);
+    $("lockCard").hidden = true; setLockIcon(false); setLog(j.log);
   } catch (e) { showStatus("Couldn't read the shared log: " + e.message + ". Numbers may be off.", "warn"); }
 }
 
@@ -591,6 +634,11 @@ document.addEventListener("keydown", e => {
 });
 
 refresh(); renderLog();
+$("lockBtn").addEventListener("click", () => {
+  if ($("lockBtn").classList.contains("open")) { lockNow(); return; }
+  if (location.hash !== "#builder") location.hash = "#builder";
+  setTimeout(() => { $("lockCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("lockInput").focus(); }, 80);
+});
 $("lockForm").addEventListener("submit", async e => {
   e.preventDefault(); const k = $("lockInput").value.trim(); if (!k) return;
   setKey(k); $("lockInput").value = ""; await loadLog();
