@@ -38,7 +38,8 @@ function logSheet_() {
     sh.getRange('A:A').setNumberFormat('@');
     sh.getRange('D:D').setNumberFormat('@');
     sh.getRange('F:F').setNumberFormat('@');
-    sh.appendRow(['85.3', 85, 3, '2026-10-20', 'WCD Palmdale 5027', '156662821', new Date(2026, 9, 20)]);
+    // starting row: the last real rate con before this log existed (your copy in Apps Script has the real one)
+    sh.appendRow(['1.1', 1, 1, '2026-01-01', 'Sample Warehouse 1234', '123456789', new Date(2026, 0, 1)]);
     sh.setFrozenRows(1);
   }
   return sh;

@@ -248,7 +248,7 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
         <section>
           <div class="sechead"><span class="step">1</span><span class="label">Broker line</span>
             <button type="button" class="ghost sm" id="pasteBtn">Paste</button></div>
-          <textarea id="line" spellcheck="false" placeholder="2. For $1600, 8 stackable REEFER pallets, 5000#, going to WCD Fontana / 5007-FONTANA TEMP CONTROL, 10288 Calabash Avenue, Fontana, CA 92335.  PO# 156662823.  Del appt sched for 11/3 @ 1 PM, Conf# F18275200."></textarea>
+          <textarea id="line" spellcheck="false" placeholder="1. For $1234, 12 stackable REEFER pallets, 1234#, going to Sample Warehouse 1234, 1234 Main Street, Anytown, CA 12345.  PO# 123456789.  Del appt sched for 1/23 @ 12 PM, Conf# A1234567."></textarea>
         </section>
 
         <section>
@@ -541,7 +541,8 @@ function showStatus(msg, kind){ const el = $("status"); el.textContent = msg; el
 
 function renderLog(){
   const ul = $("log"); ul.textContent = "";
-  const rows = recent.length ? recent : [{ number: SEED.week + "." + SEED.load, date: SEED.date, cons: "WCD Palmdale 5027" }];
+  if (!recent.length) { const ul = $("log"); ul.textContent = ""; const li = document.createElement("li"); const sp = document.createElement("span"); sp.textContent = "No rate cons yet"; li.append(sp); ul.append(li); return; }
+  const rows = recent;
   for (const r of rows.slice(0, 8)){
     const li = document.createElement("li");
     const b = document.createElement("b"); b.textContent = r.number;
