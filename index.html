@@ -150,17 +150,16 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion:reduce){.lockBtn .shackle{transition:none}.lockBtn.snap,.toast.show{animation:none}}
 .lock{border-color:var(--accent)}
-.lock.jiggle{animation:jiggle .55s cubic-bezier(.36,.07,.19,.97) both}
-@keyframes jiggle{
-  0%,100%{transform:translateX(0) rotate(0)}
-  15%{transform:translateX(-9px) rotate(-1.2deg)}
-  30%{transform:translateX(8px) rotate(1deg)}
-  45%{transform:translateX(-6px) rotate(-.7deg)}
-  60%{transform:translateX(4px) rotate(.4deg)}
-  75%{transform:translateX(-2px)}
-}
-.lock input.bad{border-color:var(--warn);background:var(--warn-bg)}
-@media (prefers-reduced-motion:reduce){.lock.jiggle{animation:none}}
+.lock input.bad{border-color:#d93025;background:color-mix(in srgb, #d93025 10%, var(--bg));color:var(--fg);animation:nudge .32s ease both}
+.lock input.bad:focus{outline-color:#d93025}
+@keyframes nudge{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@media (prefers-reduced-motion:reduce){.lock input.bad{animation:none}}
+#lockGo{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:110px}
+#lockGo .spin{display:none;width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite}
+#lockGo.busy .spin{display:inline-block}
+#lockGo.busy .lbl::after{content:"…"}
+#lockGo:disabled{opacity:.85;cursor:wait}
+@keyframes spin{to{transform:rotate(360deg)}}
 .lock p{margin:0}
 .lock input{flex:1 1 200px;min-width:0;font:15px var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px}
 @media (max-width:420px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.f.w2{grid-column:1/-1}}
@@ -215,9 +214,8 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
       <p class="hint">Type the dispatch passcode once on this device. It keeps rate con numbers and load info private to your team.</p>
       <form class="row" id="lockForm" autocomplete="off">
         <input type="password" id="lockInput" placeholder="Passcode" aria-label="Passcode">
-        <button class="go small" type="submit">Unlock</button>
+        <button class="go small" type="submit" id="lockGo"><span class="spin" aria-hidden="true"></span><span class="lbl">Unlock</span></button>
       </form>
-      <div class="status warn" id="lockErr" hidden></div>
     </section>
     <div class="make">
       <div class="col-in">
@@ -539,10 +537,9 @@ async function callLog(body){
   return r.json();
 }
 function jiggle(){
-  const card = $("lockCard"), input = $("lockInput");
-  card.classList.remove("jiggle"); void card.offsetWidth; card.classList.add("jiggle");
-  input.classList.add("bad"); input.select();
-  setTimeout(() => input.classList.remove("bad"), 1200);
+  const input = $("lockInput");
+  input.classList.remove("bad"); void input.offsetWidth; input.classList.add("bad");
+  input.select();
 }
 function setLockIcon(locked){
   const b = $("lockBtn"); if (!b) return;
@@ -561,19 +558,17 @@ function lockNow(){
 }
 function showLock(msg){
   setLockIcon(true);
-  $("lockCard").hidden = false; $("lockErr").textContent = msg || ""; $("lockErr").hidden = !msg;
+  $("lockCard").hidden = false;
   $("nextNum").textContent = "locked";
 }
 async function loadLog(){
   try {
-    let j = await callLog({ action: "log" });
-    if (!j.ok && /unknown action/i.test(j.error || "")) {          // log script not updated yet: old way
-      j = await (await fetch(API + "?action=log")).json();
-    }
-    if (!j.ok && j.error === "locked") { showLock(getKey() ? "That passcode didn't work. Check it with your team." : ""); if (getKey()) jiggle(); return; }
-    if (!j.ok) throw new Error(j.error || "unknown error");
+    const j = await callLog({ action: "log" });
+    if (!j.ok && j.error === "locked") { showLock(); return false; }
+    if (!j.ok) return null;
     $("lockCard").hidden = true; setLockIcon(false); setLog(j.log);
-  } catch (e) { showStatus("Couldn't read the shared log: " + e.message + ". Numbers may be off.", "warn"); }
+    return true;
+  } catch (e) { return null; }       // offline or Google hiccup: try again on the next refresh
 }
 
 $("go").addEventListener("click", async () => {
@@ -640,9 +635,19 @@ $("lockBtn").addEventListener("click", () => {
   setTimeout(() => { $("lockCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("lockInput").focus(); }, 80);
 });
 $("lockForm").addEventListener("submit", async e => {
-  e.preventDefault(); const k = $("lockInput").value.trim(); if (!k) return;
-  setKey(k); $("lockInput").value = ""; await loadLog();
+  e.preventDefault();
+  const input = $("lockInput"), btn = $("lockGo"), k = input.value.trim();
+  if (!k) { jiggle(); return; }
+  input.classList.remove("bad"); btn.classList.add("busy"); btn.disabled = true; input.readOnly = true;
+  setKey(k);
+  const ok = await loadLog();
+  btn.classList.remove("busy"); btn.disabled = false; input.readOnly = false;
+  if (ok) { input.value = ""; $("status").hidden = true; }
+  else { setKey(""); jiggle(); }
 });
+$("lockInput").addEventListener("input", () => $("lockInput").classList.remove("bad"));
+$("lockInput").addEventListener("focus", () => { fetch(API, { mode: "no-cors" }).catch(() => {}); });   // wake Google up early
+fetch(API, { mode: "no-cors" }).catch(() => {});
 loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
 </script>
 
