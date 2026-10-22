@@ -653,9 +653,22 @@ loadLog(); setInterval(loadLog, 60000);
 
   // ---- Open a PDF ----
   const view = $("signView"), drop = $("drop");
-  ["dragenter", "dragover"].forEach(t => view.addEventListener(t, e => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) { e.preventDefault(); drop.classList.add("over"); } }));
-  ["dragleave", "drop"].forEach(t => view.addEventListener(t, e => { if (t === "drop" || e.target === drop) drop.classList.remove("over"); }));
-  view.addEventListener("drop", e => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) { e.preventDefault(); openPdf(f); } });
+  // Accept any drop inside the e-Signer (files from email, downloads bar, desktop, etc.)
+  let dragDepth = 0;
+  const overOn = () => drop.classList.add("over"), overOff = () => { dragDepth = 0; drop.classList.remove("over"); };
+  view.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; overOn(); });
+  view.addEventListener("dragover", e => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; overOn(); });
+  view.addEventListener("dragleave", () => { if (--dragDepth <= 0) overOff(); });
+  view.addEventListener("drop", e => {
+    e.preventDefault(); overOff();
+    const dt = e.dataTransfer; if (!dt) return;
+    let f = dt.files && dt.files[0];
+    if (!f && dt.items) for (const it of dt.items) { if (it.kind === "file") { f = it.getAsFile(); if (f) break; } }
+    if (f) openPdf(f);
+    else status("That drag didn't include a file. Save the PDF to your computer first, then drag it in, or tap the box to pick it.", "warn");
+  });
+  // Stop the browser from opening a PDF dropped just outside the box
+  ["dragover", "drop"].forEach(t => window.addEventListener(t, e => { if (!$("signView").hidden) e.preventDefault(); }));
   $("pdfIn").addEventListener("change", e => { const f = e.target.files[0]; if (f) openPdf(f); e.target.value = ""; });
   $("newPdf").addEventListener("click", () => $("pdfIn").click());
 
