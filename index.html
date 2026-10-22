@@ -133,6 +133,8 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .modalCard p{margin:0;color:var(--muted)}
 .modalCard .go{justify-self:end}
 #signWork{display:grid;gap:10px}
+.saveRow{display:flex;gap:10px;flex-wrap:wrap}
+.saveRow .go{flex:1 1 220px}
 .hdrRight{display:flex;align-items:center;gap:14px}
 .lockBtn{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);cursor:pointer;transition:background .2s,color .2s,border-color .2s}
 .lockBtn:hover{border-color:var(--accent)}
@@ -345,7 +347,11 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
           </div>
         </div>
         <div class="hint">Scroll through every page. Drag the signature anywhere, even onto another page, and drag the corner dot to resize it.</div>
-        <button class="go" id="signGo" type="button">Save signed PDF</button>
+        <div class="saveRow">
+          <button class="go" id="signGo" type="button">Save signed PDF</button>
+          <button class="ghost" id="signCopy" type="button" hidden>Save a copy instead</button>
+        </div>
+        <div class="hint" id="saveHint"></div>
       </div>
       <div id="signStatus" class="status" hidden></div>
     </section>
@@ -827,23 +833,41 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
   view.addEventListener("drop", e => {
     e.preventDefault(); overOff();
     const dt = e.dataTransfer; if (!dt) return;
+    // grab a handle to the original file (Chrome/Edge) so saving can write back over it
+    let handleP = null;
+    if (dt.items) for (const it of dt.items) if (it.kind === "file" && it.getAsFileSystemHandle) { handleP = it.getAsFileSystemHandle(); break; }
     let f = dt.files && dt.files[0];
     if (!f && dt.items) for (const it of dt.items) { if (it.kind === "file") { f = it.getAsFile(); if (f) break; } }
-    if (f) openPdf(f);
+    if (f) (handleP ? handleP.catch(() => null) : Promise.resolve(null)).then(h => openPdf(f, h && h.kind === "file" ? h : null));
     else status("That drag didn't include a file. Save the PDF to your computer first, then drag it in, or tap the box to pick it.", "warn");
   });
   // Stop the browser from opening a PDF dropped just outside the box
   ["dragover", "drop"].forEach(t => window.addEventListener(t, e => { if (!$("signView").hidden) e.preventDefault(); }));
-  $("pdfIn").addEventListener("change", e => { const f = e.target.files[0]; if (f) openPdf(f); e.target.value = ""; });
-  $("newPdf").addEventListener("click", () => $("pdfIn").click());
+  $("pdfIn").addEventListener("change", e => { const f = e.target.files[0]; if (f) openPdf(f, null); e.target.value = ""; });
+  // Picking a file: use the browser's file picker that can save back over the original when available
+  async function pickPdf(){
+    if (window.showOpenFilePicker) {
+      try {
+        const [h] = await window.showOpenFilePicker({ types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }], multiple: false });
+        if (h) openPdf(await h.getFile(), h);
+      } catch (e) { /* closed the picker */ }
+    } else $("pdfIn").click();
+  }
+  drop.addEventListener("click", e => { if (window.showOpenFilePicker) { e.preventDefault(); pickPdf(); } });
+  $("newPdf").addEventListener("click", pickPdf);
 
-  async function openPdf(file){
+  let fileHandle = null;
+  async function openPdf(file, handle){
+    fileHandle = handle || null;
     if (!/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) { status("That isn't a PDF. Drop the rate con PDF the broker sent.", "warn"); return; }
     if (!window.pdfjsLib || !window.PDFLib) { status("The PDF tools didn't load. Check your internet and refresh.", "warn"); return; }
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
     status("Opening " + file.name + "…");
     try {
       pdfBytes = await file.arrayBuffer(); pdfName = file.name.replace(/\.pdf$/i, "");
+      $("signGo").textContent = fileHandle ? "Save signed PDF" : "Download signed PDF";
+      $("signCopy").hidden = !fileHandle;
+      $("saveHint").textContent = fileHandle ? "Saves over " + file.name + " in the folder it came from." : "Saves to your Downloads as " + pdfName + "_SIGNED.pdf.";
       pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice(0) }).promise;
       const spot = await findSpot();
       drop.hidden = true; $("newPdf").hidden = false; $("signWork").hidden = false;
@@ -1107,21 +1131,48 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
   })();
 
   // ---- Save ----
+  async function signedBlob(){
+    const { PDFDocument } = PDFLib;
+    const doc = await PDFDocument.load(pdfBytes.slice(0), { ignoreEncryption: true });
+    const img = await doc.embedPng(sigData);
+    doc.getPages()[place.page - 1].drawImage(img, { x: place.x, y: place.y, width: place.w, height: place.w / sigAspect });
+    return new Blob([await doc.save()], { type: "application/pdf" });
+  }
+  function download(blob, name){
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  function ready(){
+    if (!sigData) { status("Save your signature in step 1 first.", "warn"); $("sigPad").scrollIntoView({ behavior: "smooth", block: "center" }); return false; }
+    if (!pdfBytes || !place) { status("Drop a rate con PDF first.", "warn"); return false; }
+    return true;
+  }
   $("signGo").addEventListener("click", async () => {
-    if (!sigData) { status("Save your signature in step 1 first.", "warn"); $("sigPad").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
-    if (!pdfBytes || !place) { status("Drop a rate con PDF first.", "warn"); return; }
-    try {
-      const { PDFDocument } = PDFLib;
-      const doc = await PDFDocument.load(pdfBytes.slice(0), { ignoreEncryption: true });
-      const img = await doc.embedPng(sigData);
-      doc.getPages()[place.page - 1].drawImage(img, { x: place.x, y: place.y, width: place.w, height: place.w / sigAspect });
-      const blob = new Blob([await doc.save()], { type: "application/pdf" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = pdfName + "_SIGNED.pdf";
-      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      status("Saved " + pdfName + "_SIGNED.pdf");
-    } catch (e) {
-      status("Couldn't sign that PDF: " + (e && e.message || e) + ". If it's password-protected, ask the broker for an unlocked copy.", "warn");
+    if (!ready()) return;
+    let blob;
+    try { blob = await signedBlob(); }
+    catch (e) { status("Couldn't sign that PDF: " + (e && e.message || e) + ". If it's password-protected, ask the broker for an unlocked copy.", "warn"); return; }
+    if (fileHandle) {
+      try {
+        let perm = fileHandle.queryPermission ? await fileHandle.queryPermission({ mode: "readwrite" }) : "granted";
+        if (perm !== "granted" && fileHandle.requestPermission) perm = await fileHandle.requestPermission({ mode: "readwrite" });
+        if (perm !== "granted") throw new Error("permission");
+        const w = await fileHandle.createWritable(); await w.write(blob); await w.close();
+        status("Saved over " + fileHandle.name + ". It's signed in its original folder.");
+        return;
+      } catch (e) {
+        download(blob, pdfName + "_SIGNED.pdf");
+        status("Couldn't write over the original, so it went to Downloads as " + pdfName + "_SIGNED.pdf.", "warn");
+        return;
+      }
     }
+    download(blob, pdfName + "_SIGNED.pdf");
+    status("Saved " + pdfName + "_SIGNED.pdf to Downloads.");
+  });
+  $("signCopy").addEventListener("click", async () => {
+    if (!ready()) return;
+    try { download(await signedBlob(), pdfName + "_SIGNED.pdf"); status("Saved a copy to Downloads as " + pdfName + "_SIGNED.pdf."); }
+    catch (e) { status("Couldn't sign that PDF: " + (e && e.message || e), "warn"); }
   });
 })();
 </script>
