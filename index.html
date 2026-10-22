@@ -154,6 +154,25 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .lock input.bad:focus{outline-color:#d93025}
 @keyframes nudge{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
 @media (prefers-reduced-motion:reduce){.lock input.bad{animation:none}}
+.lockRow{position:relative}
+#lockForm{transition:opacity .18s ease}
+#lockForm.gone{opacity:0;pointer-events:none}
+.okAnim{position:absolute;inset:0;display:none;place-items:center;pointer-events:none}
+.okAnim.run{display:grid}
+.okAnim .pill{position:absolute;inset:0;display:grid;place-items:center;background:var(--accent);border-radius:8px;
+  clip-path:inset(0 0 0 0 round 8px);
+  animation:squeeze .42s cubic-bezier(.7,0,.3,1) forwards, popc .38s .42s cubic-bezier(.34,1.7,.64,1) forwards}
+@keyframes squeeze{to{clip-path:inset(0 calc(50% - 22px) 0 calc(50% - 22px) round 999px)}}
+@keyframes popc{0%{transform:scale(1)}45%{transform:scale(1.22)}100%{transform:scale(1)}}
+.okAnim svg{width:26px;height:26px;overflow:visible}
+.okAnim path{fill:none;stroke:var(--accent-fg);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:20;stroke-dashoffset:20;animation:tick .32s .62s ease-out forwards}
+@keyframes tick{to{stroke-dashoffset:0}}
+.okAnim i{position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px;border-radius:50%;background:var(--accent);opacity:0;
+  animation:bubble .55s .5s cubic-bezier(.2,.7,.3,1) forwards}
+.okAnim i:nth-of-type(even){width:5px;height:5px;margin:-2.5px;animation-delay:.56s}
+@keyframes bubble{0%{opacity:1;transform:rotate(var(--a)) translateY(-14px) scale(1)}100%{opacity:0;transform:rotate(var(--a)) translateY(-40px) scale(.3)}}
+.lock{transition:opacity .4s ease, transform .4s ease}
+.lock.leaving{opacity:0;transform:translateY(-6px) scale(.98)}
 #lockGo{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:110px}
 #lockGo .spin{display:none;width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite}
 #lockGo.busy .spin{display:inline-block}
@@ -212,10 +231,17 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
     <section class="lock" id="lockCard" hidden>
       <div class="sechead"><span class="label">Unlock the shared log</span></div>
       <p class="hint">Type the dispatch passcode once on this device. It keeps rate con numbers and load info private to your team.</p>
-      <form class="row" id="lockForm" autocomplete="off">
-        <input type="password" id="lockInput" placeholder="Passcode" aria-label="Passcode">
-        <button class="go small" type="submit" id="lockGo"><span class="spin" aria-hidden="true"></span><span class="lbl">Unlock</span></button>
-      </form>
+      <div class="lockRow">
+        <form class="row" id="lockForm" autocomplete="off">
+          <input type="password" id="lockInput" placeholder="Passcode" aria-label="Passcode">
+          <button class="go small" type="submit" id="lockGo"><span class="spin" aria-hidden="true"></span><span class="lbl">Unlock</span></button>
+        </form>
+        <div class="okAnim" id="okAnim" aria-hidden="true">
+          <span class="pill"><svg viewBox="0 0 24 24"><path d="M6.5 12.5l3.6 3.6L17.5 8.7"/></svg></span>
+          <i style="--a:0deg"></i><i style="--a:45deg"></i><i style="--a:90deg"></i><i style="--a:135deg"></i>
+          <i style="--a:180deg"></i><i style="--a:225deg"></i><i style="--a:270deg"></i><i style="--a:315deg"></i>
+        </div>
+      </div>
     </section>
     <div class="make">
       <div class="col-in">
@@ -566,7 +592,8 @@ async function loadLog(){
     const j = await callLog({ action: "log" });
     if (!j.ok && j.error === "locked") { showLock(); return false; }
     if (!j.ok) return null;
-    $("lockCard").hidden = true; setLockIcon(false); setLog(j.log);
+    if (!celebrating) $("lockCard").hidden = true;
+    setLockIcon(false); setLog(j.log);
     return true;
   } catch (e) { return null; }       // offline or Google hiccup: try again on the next refresh
 }
@@ -634,16 +661,57 @@ $("lockBtn").addEventListener("click", () => {
   if (location.hash !== "#builder") location.hash = "#builder";
   setTimeout(() => { $("lockCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("lockInput").focus(); }, 80);
 });
+// Remember a scrambled fingerprint of the passcode on this device, so the next unlock is instant.
+const enc = new TextEncoder();
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+async function fingerprint(k, salt){
+  const base = await crypto.subtle.importKey("raw", enc.encode(k), "PBKDF2", false, ["deriveBits"]);
+  return b64(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: enc.encode(salt), iterations: 120000, hash: "SHA-256" }, base, 256));
+}
+function getFP(){ try { return JSON.parse(localStorage.getItem("zbt_fp") || "null"); } catch (e) { return null; } }
+async function saveFP(k){ try { if (!crypto.subtle) return; const salt = b64(crypto.getRandomValues(new Uint8Array(16))); localStorage.setItem("zbt_fp", JSON.stringify({ salt, h: await fingerprint(k, salt) })); } catch (e) {} }
+function clearFP(){ try { localStorage.removeItem("zbt_fp"); } catch (e) {} }
+
+let celebrating = false;
+function celebrate(){
+  const card = $("lockCard"), anim = $("okAnim"), form = $("lockForm");
+  setLockIcon(false); $("lockInput").value = ""; $("status").hidden = true;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { card.hidden = true; return; }
+  celebrating = true;
+  anim.classList.remove("run"); void anim.offsetWidth;
+  form.classList.add("gone"); anim.classList.add("run");
+  setTimeout(() => card.classList.add("leaving"), 1250);
+  setTimeout(() => {
+    card.hidden = true; card.classList.remove("leaving"); form.classList.remove("gone"); anim.classList.remove("run");
+    celebrating = false;
+  }, 1700);
+}
 $("lockForm").addEventListener("submit", async e => {
   e.preventDefault();
   const input = $("lockInput"), btn = $("lockGo"), k = input.value.trim();
-  if (!k) { jiggle(); return; }
-  input.classList.remove("bad"); btn.classList.add("busy"); btn.disabled = true; input.readOnly = true;
-  setKey(k);
+  if (!k || celebrating) { if (!k) jiggle(); return; }
+  input.classList.remove("bad");
+  const fp = getFP();
+  if (fp && crypto.subtle) {
+    if ((await fingerprint(k, fp.salt)) === fp.h) {               // instant yes
+      setKey(k); celebrate();
+      loadLog().then(ok => { if (ok === false) { clearFP(); setKey(""); celebrating = false; $("lockCard").hidden = false; jiggle(); } });
+      return;
+    }
+    jiggle();                                                   // instant no; still ask Google in case the passcode changed
+    setKey(k);
+    const ok = await loadLog();
+    if (ok) { await saveFP(k); celebrate(); } else setKey("");
+    return;
+  }
+  // first unlock on this device: Google has to check it
+  btn.classList.add("busy"); btn.disabled = true; input.readOnly = true;
+  setKey(k); celebrating = true;
   const ok = await loadLog();
+  celebrating = false;
   btn.classList.remove("busy"); btn.disabled = false; input.readOnly = false;
-  if (ok) { input.value = ""; $("status").hidden = true; }
-  else { setKey(""); jiggle(); }
+  if (ok) { await saveFP(k); celebrate(); }
+  else { setKey(""); if (ok === false) jiggle(); else $("lockCard").hidden = false; }
 });
 $("lockInput").addEventListener("input", () => $("lockInput").classList.remove("bad"));
 $("lockInput").addEventListener("focus", () => { fetch(API, { mode: "no-cors" }).catch(() => {}); });   // wake Google up early
