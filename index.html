@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
-<title>ZBT Rate Con Maker</title>
+<title>ZBT Dispatch Tools</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -20,7 +20,7 @@
   --accent:#4fb383; --accent-fg:#0d1511; --warn:#f0a35e; --warn-bg:#3a2715; --ok-bg:#183326; color-scheme:dark}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
-.wrap{max-width:640px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:grid;gap:18px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:grid;gap:18px}
 header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.01em;margin:0;text-wrap:balance}
 .next{font-family:var(--mono);font-size:13px;color:var(--muted)}
@@ -73,71 +73,147 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .pager{display:flex;align-items:center;gap:8px}
 .previewWrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;max-height:75vh}
 #preview{display:block;width:100%;height:auto;cursor:copy}
-@media (max-width:420px){.fields{grid-template-columns:minmax(0,1fr)}}
+#signView{max-width:680px;width:100%;margin:0 auto}
+.make{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.col-in{display:grid;gap:14px;min-width:0}
+.col-out{position:sticky;top:12px;min-width:0}
+.sechead{display:flex;align-items:center;gap:10px}
+.sechead .hint{margin-left:auto;font-size:13px;color:var(--muted)}
+.sechead .ghost.sm{margin-left:auto}
+.step{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-fg);font:700 13px var(--display)}
+.ghost.sm{padding:6px 12px;font-size:13px}
+.ghost.wide{width:100%;padding:12px;font:700 16px var(--display)}
+.seg.days button{min-width:0;padding:9px 4px}
+#line{min-height:96px}
+.pv{display:grid;gap:12px}
+.pvbox{position:relative;background:#fff;border:1px solid var(--line);border-radius:6px;overflow:hidden;aspect-ratio:8.5/11}
+#rcPreview{display:block;width:100%;height:auto}
+.pvempty{position:absolute;inset:0;display:grid;place-items:center;color:#8a938e;font:600 15px var(--display);letter-spacing:.03em}
+.go kbd{font:500 11px var(--mono);opacity:.75;margin-left:6px;border:1px solid currentColor;border-radius:4px;padding:1px 4px}
+.fields{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fields .wide{grid-column:1/-1}
+@media (max-width:900px){.make{grid-template-columns:minmax(0,1fr)}.col-out{position:static}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.go kbd{display:none}}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:4px}
+.brandlink{display:flex;align-items:center;gap:12px;color:var(--fg);text-decoration:none}
+.brandlink img{border-radius:50%;background:#fff;padding:2px}
+.brandlink b{display:block;font:700 20px var(--display);letter-spacing:.01em}
+.brandlink small{display:block;color:var(--muted);font-size:13px}
+.hero{padding-block:18px 4px}
+.hero h1{font-size:34px}
+.hero p{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.tool{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;padding:22px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--fg);text-decoration:none;transition:border-color .15s, transform .15s}
+.tool:hover{border-color:var(--accent);transform:translateY(-1px)}
+.tool:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ticon{display:grid;place-items:center;width:52px;height:52px;border-radius:10px;background:var(--ok-bg);color:var(--accent)}
+.ticon svg{width:28px;height:28px}
+.tbody{display:grid;gap:4px;min-width:0}
+.tbody b{font:700 20px var(--display);letter-spacing:.01em}
+.tbody span{color:var(--muted);font-size:14px}
+.tgo{font-size:22px;color:var(--accent)}
+.toolbar{display:grid;gap:2px}
+.toolbar .back{color:var(--accent);text-decoration:none;font-weight:600;font-size:14px;width:max-content}
+.toolbar h1{font-size:28px}
+.f.w2{grid-column:span 2}
+@media (max-width:700px){.tools{grid-template-columns:minmax(0,1fr)}.hero h1{font-size:28px}}
+@media (max-width:420px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.f.w2{grid-column:1/-1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head><body>
 
 <div class="wrap">
-  <header>
-    <h1>Z Brothers Rate Con</h1>
-    <div class="next" id="nextWrap">Next number: <b id="nextNum">…</b></div>
+  <header class="brand">
+    <a href="#" class="brandlink" id="homeLink"><img id="brandLogo" alt="" width="44" height="44"><span><b>Z Brothers Trucking</b><small>Dispatch Tools</small></span></a>
+    <div class="next" id="nextWrap" hidden>Next number: <b id="nextNum">…</b></div>
   </header>
-  <div class="tabs" role="tablist">
-    <button type="button" role="tab" id="tabMake" aria-selected="true">Make a rate con</button>
-    <button type="button" role="tab" id="tabSign" aria-selected="false">Sign a rate con</button>
+
+  <div id="homeView" class="view">
+    <div class="hero">
+      <h1>What do you need to do?</h1>
+      <p>Pick a tool to get started.</p>
+    </div>
+    <div class="tools">
+      <a class="tool" href="#builder">
+        <span class="ticon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6M9 13h8M9 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="tbody"><b>Biscotti Rate Confirmation Builder</b>
+        <span>Paste the broker's load line and get a numbered, ready-to-send rate confirmation PDF.</span></span>
+        <span class="tgo" aria-hidden="true">→</span>
+      </a>
+      <a class="tool" href="#signer">
+        <span class="ticon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17c3-1 4-6 6-6s1 5 3 5 3-4 5-4 2 2 4 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="tbody"><b>Rate Confirmation e‑Signer</b>
+        <span>Drop in a broker's rate con. Your signature and today's date go on the carrier line automatically.</span></span>
+        <span class="tgo" aria-hidden="true">→</span>
+      </a>
+    </div>
   </div>
-  <div id="makeView" class="view">
 
-  <section>
-    <div class="label">1 · Paste the broker line</div>
-    <textarea id="line" spellcheck="false">2. For $1600, 8 stackable REEFER pallets, 5000#, going to WCD Fontana / 5007-FONTANA TEMP CONTROL, 10288 Calabash Avenue, Fontana, CA 92335.  PO# 156662823.  Del appt sched for 11/3 @ 1 PM, Conf# F18275200.</textarea>
-    <div class="next" id="sampleNote">Example line shown. Paste over it.</div>
-  </section>
+  <div class="toolbar" id="toolbar" hidden>
+    <a href="#" class="back">← All tools</a>
+    <h1 id="toolTitle"></h1>
+  </div>
+  <div id="makeView" class="view" hidden>
+    <div class="make">
+      <div class="col-in">
+        <section>
+          <div class="sechead"><span class="step">1</span><span class="label">Broker line</span>
+            <button type="button" class="ghost sm" id="pasteBtn">Paste</button></div>
+          <textarea id="line" spellcheck="false" placeholder="2. For $1600, 8 stackable REEFER pallets, 5000#, going to WCD Fontana / 5007-FONTANA TEMP CONTROL, 10288 Calabash Avenue, Fontana, CA 92335.  PO# 156662823.  Del appt sched for 11/3 @ 1 PM, Conf# F18275200."></textarea>
+        </section>
 
-  <section>
-    <div class="label">2 · Pickup from</div>
-    <div class="seg" id="locSeg">
-      <button type="button" data-v="greensburg" aria-pressed="true">Greensburg<small>Biscotti · by 3:30pm</small></button>
-      <button type="button" data-v="youngwood" aria-pressed="false">Youngwood<small>Catch Up · by 2pm</small></button>
-    </div>
-    <div class="label">Pickup day</div>
-    <div class="seg" id="daySeg">
-      <button type="button" data-v="1" aria-pressed="true">Mon</button>
-      <button type="button" data-v="2" aria-pressed="false">Tue</button>
-      <button type="button" data-v="3" aria-pressed="false">Wed</button>
-      <button type="button" data-v="4" aria-pressed="false">Thu</button>
-      <button type="button" data-v="5" aria-pressed="false">Fri</button>
-    </div>
-  </section>
+        <section>
+          <div class="sechead"><span class="step">2</span><span class="label">Pickup</span></div>
+          <div class="seg" id="locSeg">
+            <button type="button" data-v="greensburg" aria-pressed="true">Greensburg<small>by 3:30pm</small></button>
+            <button type="button" data-v="youngwood" aria-pressed="false">Youngwood<small>by 2pm</small></button>
+          </div>
+          <div class="seg days" id="daySeg">
+            <button type="button" data-v="1" aria-pressed="true">Mon</button>
+            <button type="button" data-v="2" aria-pressed="false">Tue</button>
+            <button type="button" data-v="3" aria-pressed="false">Wed</button>
+            <button type="button" data-v="4" aria-pressed="false">Thu</button>
+            <button type="button" data-v="5" aria-pressed="false">Fri</button>
+          </div>
+        </section>
 
-  <section>
-    <div class="label">3 · Check what goes on the rate con</div>
-    <div class="fields">
-      <div class="f"><label for="f_number">Number</label><input id="f_number"></div>
-      <div class="f"><label for="f_rate">Total rate</label><input id="f_rate"></div>
-      <div class="f"><label for="f_pudate">Pickup date</label><input id="f_pudate"></div>
-      <div class="f"><label for="f_putime">Pickup time</label><input id="f_putime"></div>
-      <div class="f wide"><label for="f_cons">Consignee</label><input id="f_cons"></div>
-      <div class="f"><label for="f_deldate">Delivery date</label><input id="f_deldate"></div>
-      <div class="f"><label for="f_deltime">Delivery time</label><input id="f_deltime"></div>
-      <div class="f"><label for="f_po">PO#</label><input id="f_po"></div>
-      <div class="f"><label for="f_conf">Conf / Appt</label><input id="f_conf"></div>
-      <div class="f"><label for="f_wt">Weight</label><input id="f_wt"></div>
-      <div class="f"><label for="f_qty">QTY</label><input id="f_qty"></div>
-    </div>
-    <ul id="warns" class="warns" hidden></ul>
-    <div class="row">
-      <label class="check"><input type="checkbox" id="isTest"> Test (don't count it)</label>
-      <button class="go" id="go" type="button">Save PDF</button>
-    </div>
-    <div id="status" class="status" hidden></div>
-  </section>
+        <section>
+          <div class="sechead"><span class="step">3</span><span class="label">Check</span><span class="hint">Edit any box if it's wrong</span></div>
+          <div class="fields">
+            <div class="f"><label for="f_number">Number</label><input id="f_number"></div>
+            <div class="f"><label for="f_rate">Total rate</label><input id="f_rate"></div>
+            <div class="f"><label for="f_po">PO#</label><input id="f_po"></div>
+            <div class="f"><label for="f_pudate">Pickup date</label><input id="f_pudate"></div>
+            <div class="f"><label for="f_putime">Pickup time</label><input id="f_putime"></div>
+            <div class="f"><label for="f_conf">Conf / Appt</label><input id="f_conf"></div>
+            <div class="f"><label for="f_deldate">Delivery date</label><input id="f_deldate"></div>
+            <div class="f"><label for="f_deltime">Delivery time</label><input id="f_deltime"></div>
+            <div class="f"><label for="f_wt">Weight</label><input id="f_wt"></div>
+            <div class="f w2"><label for="f_cons">Consignee</label><input id="f_cons"></div>
+            <div class="f"><label for="f_qty">QTY</label><input id="f_qty"></div>
+          </div>
+          <ul id="warns" class="warns" hidden></ul>
+        </section>
+      </div>
 
-  <section>
-    <div class="label">Recent rate cons</div>
-    <ul class="log" id="log"><li><span>Loading shared log…</span></li></ul>
-  </section>
+      <div class="col-out">
+        <section class="pv">
+          <div class="sechead"><span class="label">Preview</span><span class="hint" id="pvNote">Paste a line to see the rate con</span></div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="isTest"> Test</label>
+            <button class="go" id="go" type="button">Save PDF <kbd>Ctrl ↵</kbd></button>
+          </div>
+          <div id="status" class="status" hidden></div>
+          <button type="button" class="ghost wide" id="nextLoad" hidden>Next load →</button>
+          <div class="pvbox"><canvas id="rcPreview" aria-label="Rate con preview"></canvas>
+            <div class="pvempty" id="pvEmpty">Your rate con shows up here</div></div>
+        </section>
+      </div>
+    </div>
+
+    <section>
+      <div class="label">Recent rate cons</div>
+      <ul class="log" id="log"><li><span>Loading shared log…</span></li></ul>
+    </section>
   </div>
 
   <div id="signView" class="view" hidden>
@@ -255,13 +331,37 @@ function refresh(){
     rate: d.rate, pudate: mdy(pu), putime: DAYNAMES[day] + " by " + SHIPPERS[loc].close,
     cons: d.cons, deldate: d.deldate, deltime: d.deltime, po: d.po, conf: d.conf, wt: d.wt, qty: d.qty,
   };
+  const empty = !$("line").value.trim();
   for (const k of FIELDS){
     const el = $("f_" + k);
     if (!touched.has(k)) el.value = vals[k];
-    el.classList.toggle("missing", !el.value.trim());
+    el.classList.toggle("missing", !empty && !el.value.trim());
   }
   $("nextNum").textContent = currentWeek() + "." + (d.load || "?");
   renderWarns();
+  schedulePreview();
+}
+
+// Live preview of the rate con, drawn from the same PDF that gets saved.
+let pvTimer = null, pvToken = 0;
+function schedulePreview(){ clearTimeout(pvTimer); pvTimer = setTimeout(drawRcPreview, 250); }
+async function drawRcPreview(){
+  const token = ++pvToken, terms = $("line").value.split(/\s+/).join(" ").trim();
+  const c = $("rcPreview");
+  if (!terms) { $("pvEmpty").hidden = false; c.width = 0; c.height = 0; $("pvNote").textContent = "Paste a line to see the rate con"; return; }
+  if (!window.pdfjsLib) { $("pvNote").textContent = "Preview isn't available right now"; return; }
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  try {
+    const v = {}; for (const k of FIELDS) v[k] = $("f_" + k).value.trim();
+    const buf = await buildPdf(v, terms).arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await doc.getPage(1);
+    const vp = page.getViewport({ scale: 1.6 });
+    if (token !== pvToken) return;
+    c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    $("pvEmpty").hidden = true; $("pvNote").textContent = "RateCon_" + (v.number || "?") + ".pdf";
+  } catch (e) { $("pvNote").textContent = "Couldn't draw the preview"; }
 }
 
 // Mistake checks: things that are probably wrong even when every box is filled.
@@ -297,7 +397,7 @@ function checks(){
   return w;
 }
 function renderWarns(){
-  const w = checks(), ul = $("warns"); ul.textContent = "";
+  const w = $("line").value.trim() ? checks() : [], ul = $("warns"); ul.textContent = "";
   for (const s of w){ const li = document.createElement("li"); li.textContent = s; ul.append(li); }
   ul.hidden = !w.length;
   return w;
@@ -371,6 +471,7 @@ async function loadLog(){
 }
 
 $("go").addEventListener("click", async () => {
+  if (!$("line").value.trim()) { showStatus("Paste the broker line first.", "warn"); $("line").focus(); return; }
   const v = {}; for (const k of FIELDS) v[k] = $("f_" + k).value.trim();
   const missing = FIELDS.filter(k => !v[k]);
   const warns = renderWarns();
@@ -387,6 +488,7 @@ $("go").addEventListener("click", async () => {
   a.href = URL.createObjectURL(blob); a.download = "RateCon_" + v.number + ".pdf";
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  $("nextLoad").hidden = false;
   if ($("isTest").checked) { showStatus("Saved " + v.number + " as a test. It wasn't counted.", "ok"); return; }
   const [wk, ld] = v.number.split(".");
   const rec = { number: v.number, week: Number(wk), load: Number(ld) || 0, date: iso(new Date()), cons: v.cons, po: v.po, ts: Date.now() };
@@ -408,8 +510,22 @@ for (const [segId, set] of [["locSeg", v => loc = v], ["daySeg", v => day = Numb
     set(b.dataset.v); touched.delete("pudate"); touched.delete("putime"); refresh();
   });
 }
-$("line").addEventListener("input", () => { touched.clear(); confirmMissing = false; $("sampleNote").hidden = true; refresh(); });
-for (const k of FIELDS) $("f_" + k).addEventListener("input", () => { touched.add(k); confirmMissing = false; $("f_" + k).classList.toggle("missing", !$("f_" + k).value.trim()); renderWarns(); });
+$("line").addEventListener("input", () => { touched.clear(); confirmMissing = false; $("status").hidden = true; $("nextLoad").hidden = true; refresh(); });
+for (const k of FIELDS) $("f_" + k).addEventListener("input", () => { touched.add(k); confirmMissing = false; $("f_" + k).classList.toggle("missing", !$("f_" + k).value.trim()); renderWarns(); schedulePreview(); });
+$("pasteBtn").addEventListener("click", async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (t && t.trim()) { $("line").value = t.trim(); $("line").dispatchEvent(new Event("input")); return; }
+  } catch (e) {}
+  $("line").focus(); showStatus("Press Ctrl+V (or long-press → Paste) in the box.", "warn");
+});
+$("nextLoad").addEventListener("click", () => {
+  $("line").value = ""; touched.clear(); confirmMissing = false; $("isTest").checked = false;
+  $("status").hidden = true; $("nextLoad").hidden = true; refresh(); $("line").focus();
+});
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !$("makeView").hidden) { e.preventDefault(); $("go").click(); }
+});
 
 refresh(); renderLog();
 loadLog(); setInterval(loadLog, 60000);
@@ -417,21 +533,24 @@ loadLog(); setInterval(loadLog, 60000);
 
 
 <script>
-// ---------- Tabs ----------
+// ---------- Home + tools ----------
 (function(){
-  const tabs = { make: document.getElementById("tabMake"), sign: document.getElementById("tabSign") };
-  function show(which){
-    for (const k of ["make","sign"]) {
-      tabs[k].setAttribute("aria-selected", k === which ? "true" : "false");
-      document.getElementById(k + "View").hidden = k !== which;
-    }
-    document.getElementById("nextWrap").hidden = which !== "make";
-    try { localStorage.setItem("zbt_tab", which); } catch (e) {}
+  const views = { "": "homeView", builder: "makeView", signer: "signView" };
+  const titles = { builder: "Biscotti Rate Confirmation Builder", signer: "Rate Confirmation e‑Signer" };
+  const legacy = { sign: "signer", make: "builder" };
+  function route(){
+    let h = location.hash.replace("#", ""); h = legacy[h] || h; if (!(h in views)) h = "";
+    for (const k in views) document.getElementById(views[k]).hidden = k !== h;
+    document.getElementById("toolbar").hidden = !h;
+    document.getElementById("toolTitle").textContent = titles[h] || "";
+    document.getElementById("nextWrap").hidden = h !== "builder";
+    document.title = h ? titles[h] + " · ZBT" : "ZBT Dispatch Tools";
+    window.scrollTo(0, 0);
+    if (h === "builder") setTimeout(() => { const l = document.getElementById("line"); if (l && !l.value) l.focus(); }, 50);
   }
-  tabs.make.addEventListener("click", () => show("make"));
-  tabs.sign.addEventListener("click", () => show("sign"));
-  let saved = null; try { saved = localStorage.getItem("zbt_tab"); } catch (e) {}
-  if (location.hash === "#sign" || saved === "sign") show("sign");
+  window.addEventListener("hashchange", route);
+  document.getElementById("brandLogo").src = LOGO;
+  route();
 })();
 
 // ---------- Sign a rate con ----------
