@@ -133,6 +133,17 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .modalCard .go{justify-self:end}
 #signWork{display:grid;gap:10px}
 .lock{border-color:var(--accent)}
+.lock.jiggle{animation:jiggle .55s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes jiggle{
+  0%,100%{transform:translateX(0) rotate(0)}
+  15%{transform:translateX(-9px) rotate(-1.2deg)}
+  30%{transform:translateX(8px) rotate(1deg)}
+  45%{transform:translateX(-6px) rotate(-.7deg)}
+  60%{transform:translateX(4px) rotate(.4deg)}
+  75%{transform:translateX(-2px)}
+}
+.lock input.bad{border-color:var(--warn);background:var(--warn-bg)}
+@media (prefers-reduced-motion:reduce){.lock.jiggle{animation:none}}
 .lock p{margin:0}
 .lock input{flex:1 1 200px;min-width:0;font:15px var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px}
 @media (max-width:420px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.f.w2{grid-column:1/-1}}
@@ -500,6 +511,12 @@ async function callLog(body){
   const r = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ ...body, key: getKey() }) });
   return r.json();
 }
+function jiggle(){
+  const card = $("lockCard"), input = $("lockInput");
+  card.classList.remove("jiggle"); void card.offsetWidth; card.classList.add("jiggle");
+  input.classList.add("bad"); input.select();
+  setTimeout(() => input.classList.remove("bad"), 1200);
+}
 function showLock(msg){
   $("lockCard").hidden = false; $("lockErr").textContent = msg || ""; $("lockErr").hidden = !msg;
   $("nextNum").textContent = "locked";
@@ -510,7 +527,7 @@ async function loadLog(){
     if (!j.ok && /unknown action/i.test(j.error || "")) {          // log script not updated yet: old way
       j = await (await fetch(API + "?action=log")).json();
     }
-    if (!j.ok && j.error === "locked") { showLock(getKey() ? "That passcode didn't work. Check it with your team." : ""); return; }
+    if (!j.ok && j.error === "locked") { showLock(getKey() ? "That passcode didn't work. Check it with your team." : ""); if (getKey()) jiggle(); return; }
     if (!j.ok) throw new Error(j.error || "unknown error");
     $("lockCard").hidden = true; setLog(j.log);
   } catch (e) { showStatus("Couldn't read the shared log: " + e.message + ". Numbers may be off.", "warn"); }
