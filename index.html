@@ -115,8 +115,9 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .f.w2{grid-column:span 2}
 @media (max-width:700px){.tools{grid-template-columns:minmax(0,1fr)}.hero h1{font-size:28px}}
 .signbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.stage{position:relative;background:#fff;border:1px solid var(--line);border-radius:6px;overflow:hidden;user-select:none;-webkit-user-select:none}
-#preview{display:block;width:100%;height:auto}
+.stage{position:relative;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:auto;max-height:78vh;user-select:none;-webkit-user-select:none;overscroll-behavior:contain}
+#pages{display:grid;gap:10px;padding:10px}
+#pages canvas.pg{display:block;width:100%;height:auto;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18)}
 .sigLayer{position:absolute;cursor:grab;touch-action:none;border-radius:3px;outline:1.5px dashed transparent;outline-offset:3px;transition:outline-color .15s}
 .sigLayer:hover,.sigLayer:focus,.sigLayer.active{outline-color:var(--accent)}
 .sigLayer.active{cursor:grabbing}
@@ -334,21 +335,16 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
       <div id="signWork" hidden>
         <div class="signbar">
           <div class="hint" id="spotNote"></div>
-          <div class="pager">
-            <button type="button" class="ghost sm" id="pgPrev" aria-label="Previous page">‹</button>
-            <span id="pgLabel" class="hint"></span>
-            <button type="button" class="ghost sm" id="pgNext" aria-label="Next page">›</button>
-          </div>
+          <span id="pgLabel" class="hint"></span>
         </div>
         <div class="stage" id="stage">
-          <canvas id="preview"></canvas>
+          <div id="pages"></div>
           <div class="sigLayer" id="sigLayer" hidden tabindex="0" aria-label="Your signature. Drag to move, drag the corner to resize.">
             <img id="sigOnPage" alt="" draggable="false">
             <span class="grip" id="sigGrip" aria-hidden="true"></span>
           </div>
-          <button type="button" class="ghost sm hereBtn" id="sigHere" hidden>Put signature on this page</button>
         </div>
-        <div class="hint">Drag the signature to move it. Drag the corner dot to make it bigger or smaller.</div>
+        <div class="hint">Scroll through every page. Drag the signature anywhere, even onto another page, and drag the corner dot to resize it.</div>
         <button class="go" id="signGo" type="button">Save signed PDF</button>
       </div>
       <div id="signStatus" class="status" hidden></div>
@@ -865,7 +861,7 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
         $("notFound").hidden = false; $("nfOk").focus();
       }
       status("");
-      await renderPage();
+      await renderAll(); scrollToSig();
     } catch (e) {
       status("Couldn't open that PDF: " + (e && e.message || e), "warn");
     }
@@ -1013,55 +1009,63 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
     return { x: lx0, y: ly - w / sigAspect - 6, w };
   }
 
-  // ---- Page preview ----
-  async function renderPage(){
+  // ---- All pages, stacked like a PDF viewer ----
+  let pages = [];   // {num, viewport, canvas}
+  async function renderAll(){
     if (!pdfDoc) return;
-    const page = await pdfDoc.getPage(pageNum), stage = $("stage"), c = $("preview");
-    const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(3, (stage.clientWidth * (window.devicePixelRatio || 1)) / base.width);
-    viewport = page.getViewport({ scale });
-    if (renderTask) { try { renderTask.cancel(); } catch (e) {} }
-    c.width = Math.floor(viewport.width); c.height = Math.floor(viewport.height);
-    renderTask = page.render({ canvasContext: c.getContext("2d"), viewport });
-    try { await renderTask.promise; } catch (e) { return; }
-    $("pgLabel").textContent = "Page " + pageNum + " of " + pdfDoc.numPages;
-    $("pgPrev").disabled = pageNum <= 1; $("pgNext").disabled = pageNum >= pdfDoc.numPages;
+    const stage = $("stage"), holder = $("pages"), token = (renderAll.t = (renderAll.t || 0) + 1);
+    const dpr = window.devicePixelRatio || 1, fresh = [], frag = document.createDocumentFragment();
+    for (let n = 1; n <= pdfDoc.numPages; n++) {
+      const page = await pdfDoc.getPage(n), base = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: Math.min(3, (holder.clientWidth || stage.clientWidth) * dpr / base.width) });
+      const c = document.createElement("canvas"); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      c.className = "pg"; c.setAttribute("aria-label", "Page " + n);
+      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      if (token !== renderAll.t) return;
+      fresh.push({ num: n, viewport: vp, canvas: c }); frag.append(c);
+    }
+    holder.textContent = ""; holder.append(frag); pages = fresh;
+    $("pgLabel").textContent = pdfDoc.numPages === 1 ? "1 page" : pdfDoc.numPages + " pages";
     positionLayer();
   }
-  const k = () => $("preview").clientWidth / $("preview").width;   // canvas px -> css px
+  function pageAt(i){ return pages[Math.max(0, Math.min(pages.length - 1, i))]; }
   function positionLayer(){
     const L = $("sigLayer");
-    if (!viewport || !place || !sigData) { L.hidden = true; return; }
-    const here = place.page === pageNum;
-    L.hidden = !here; $("sigHere").hidden = here;
-    if (!here) return;
-    const h = place.w / sigAspect;
-    const a = viewport.convertToViewportPoint(place.x, place.y + h), b = viewport.convertToViewportPoint(place.x + place.w, place.y);
-    const s = k();
-    L.style.left = Math.min(a[0], b[0]) * s + "px"; L.style.top = Math.min(a[1], b[1]) * s + "px";
+    if (!pages.length || !place || !sigData) { L.hidden = true; return; }
+    const pg = pageAt(place.page - 1), c = pg.canvas, s = c.clientWidth / c.width, h = place.w / sigAspect;
+    const a = pg.viewport.convertToViewportPoint(place.x, place.y + h), b = pg.viewport.convertToViewportPoint(place.x + place.w, place.y);
+    L.hidden = false;
+    L.style.left = c.offsetLeft + Math.min(a[0], b[0]) * s + "px"; L.style.top = c.offsetTop + Math.min(a[1], b[1]) * s + "px";
     L.style.width = Math.abs(b[0] - a[0]) * s + "px"; L.style.height = Math.abs(b[1] - a[1]) * s + "px";
   }
   function commitLayer(){
-    const L = $("sigLayer"), s = k();
-    const left = parseFloat(L.style.left) / s, top = parseFloat(L.style.top) / s, w = parseFloat(L.style.width) / s, h = parseFloat(L.style.height) / s;
-    const p = viewport.convertToPdfPoint(left, top), q = viewport.convertToPdfPoint(left + w, top + h);
-    place = { page: pageNum, x: Math.min(p[0], q[0]), y: Math.min(p[1], q[1]), w: Math.abs(q[0] - p[0]) };
+    const L = $("sigLayer"), left = parseFloat(L.style.left), top = parseFloat(L.style.top), w = parseFloat(L.style.width), h = parseFloat(L.style.height);
+    const cy = top + h / 2;
+    let pg = pages[0];
+    for (const p of pages) if (cy >= p.canvas.offsetTop - 6) pg = p;          // the page the signature's middle sits on
+    const c = pg.canvas, s = c.width / c.clientWidth;
+    const x0 = (left - c.offsetLeft) * s, y0 = (top - c.offsetTop) * s;
+    const p = pg.viewport.convertToPdfPoint(x0, y0), q = pg.viewport.convertToPdfPoint(x0 + w * s, y0 + h * s);
+    place = { page: pg.num, x: Math.min(p[0], q[0]), y: Math.min(p[1], q[1]), w: Math.abs(q[0] - p[0]) };
+    positionLayer();
+    $("spotNote").textContent = "Signature on page " + pg.num + ".";
   }
-  window.addEventListener("resize", () => { if (pdfDoc && !$("signView").hidden) renderPage(); });
+  function scrollToSig(){
+    const L = $("sigLayer"), stage = $("stage");
+    if (L.hidden) return;
+    stage.scrollTo({ top: Math.max(0, parseFloat(L.style.top) - stage.clientHeight / 2), behavior: "smooth" });
+  }
+  let resizeT = null;
+  window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (pdfDoc && !$("signView").hidden) renderAll(); }, 200); });
 
-  // Drag to move, corner to resize
+  // Drag to move (across pages too), corner to resize
   (function(){
     const L = $("sigLayer"), grip = $("sigGrip"), stage = $("stage");
-    let mode = null, sx = 0, sy = 0, sl = 0, st = 0, sw = 0;
-    L.addEventListener("pointerdown", e => {
-      e.preventDefault(); L.focus({ preventScroll: true });
-      mode = e.target === grip ? "size" : "move";
-      sx = e.clientX; sy = e.clientY; sl = parseFloat(L.style.left); st = parseFloat(L.style.top); sw = parseFloat(L.style.width);
-      L.setPointerCapture(e.pointerId); L.classList.add("active");
-    });
-    L.addEventListener("pointermove", e => {
-      if (!mode) return;
-      const dx = e.clientX - sx, dy = e.clientY - sy, W = stage.clientWidth, H = $("preview").clientHeight;
+    let mode = null, sx = 0, sy = 0, sl = 0, st = 0, sw = 0, ss = 0, lastE = null, raf = 0;
+    function apply(){
+      if (!mode || !lastE) return;
+      const dx = lastE.clientX - sx, dy = lastE.clientY - sy + (stage.scrollTop - ss);
+      const W = $("pages").clientWidth, H = $("pages").scrollHeight;
       if (mode === "move") {
         const w = parseFloat(L.style.width), h = parseFloat(L.style.height);
         L.style.left = Math.max(0, Math.min(W - w, sl + dx)) + "px";
@@ -1070,23 +1074,37 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
         const w = Math.max(28, Math.min(W - sl, sw + Math.max(dx, dy * sigAspect)));
         L.style.width = w + "px"; L.style.height = (w / sigAspect) + "px";
       }
+    }
+    function autoScroll(){
+      if (!mode || !lastE) return;
+      const r = stage.getBoundingClientRect(), edge = 48;
+      let v = 0;
+      if (lastE.clientY < r.top + edge) v = -Math.ceil((r.top + edge - lastE.clientY) / 4);
+      else if (lastE.clientY > r.bottom - edge) v = Math.ceil((lastE.clientY - (r.bottom - edge)) / 4);
+      if (v) { stage.scrollTop += v; apply(); }
+      raf = requestAnimationFrame(autoScroll);
+    }
+    L.addEventListener("pointerdown", e => {
+      e.preventDefault(); L.focus({ preventScroll: true });
+      mode = e.target === grip ? "size" : "move"; lastE = e;
+      sx = e.clientX; sy = e.clientY; ss = stage.scrollTop;
+      sl = parseFloat(L.style.left); st = parseFloat(L.style.top); sw = parseFloat(L.style.width);
+      L.setPointerCapture(e.pointerId); L.classList.add("active");
+      cancelAnimationFrame(raf); raf = requestAnimationFrame(autoScroll);
     });
-    const end = () => { if (!mode) return; mode = null; L.classList.remove("active"); commitLayer(); $("spotNote").textContent = "Signature on page " + pageNum + "."; };
+    L.addEventListener("pointermove", e => { if (mode) { lastE = e; apply(); } });
+    const end = () => { if (!mode) return; mode = null; cancelAnimationFrame(raf); L.classList.remove("active"); commitLayer(); };
     L.addEventListener("pointerup", end); L.addEventListener("pointercancel", end);
     L.addEventListener("keydown", e => {
+      if (!place) return;
       const step = e.shiftKey ? 10 : 2, map = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
       if (map[e.key]) { e.preventDefault(); place.x += map[e.key][0]; place.y += map[e.key][1]; positionLayer(); }
       if (e.key === "+" || e.key === "=") { place.w = Math.min(400, place.w * 1.1); positionLayer(); }
       if (e.key === "-") { place.w = Math.max(30, place.w / 1.1); positionLayer(); }
+      if (e.key === "PageDown" && place.page < pages.length) { e.preventDefault(); place.page++; positionLayer(); scrollToSig(); }
+      if (e.key === "PageUp" && place.page > 1) { e.preventDefault(); place.page--; positionLayer(); scrollToSig(); }
     });
   })();
-  $("sigHere").addEventListener("click", async () => {
-    const pg = await pdfDoc.getPage(pageNum), vb = pg.view, w = place ? place.w : 150;
-    place = { page: pageNum, w, x: (vb[0] + vb[2]) / 2 - w / 2, y: (vb[1] + vb[3]) / 2 };
-    positionLayer(); $("spotNote").textContent = "Drag your signature to where it goes.";
-  });
-  $("pgPrev").addEventListener("click", () => { if (pageNum > 1) { pageNum--; renderPage(); } });
-  $("pgNext").addEventListener("click", () => { if (pdfDoc && pageNum < pdfDoc.numPages) { pageNum++; renderPage(); } });
 
   // ---- Save ----
   $("signGo").addEventListener("click", async () => {
