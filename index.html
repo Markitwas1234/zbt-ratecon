@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
+<title>ZBT Rate Con Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow work column — paste, pick, check, save. Dispatch-desk utility. */
+:root{
+  --bg:#f3f4f2; --panel:#ffffff; --fg:#1c211e; --muted:#5d6661; --line:#d5d9d6;
+  --accent:#1f6b47; --accent-fg:#ffffff; --warn:#a14d0b; --warn-bg:#fdf0e4; --ok-bg:#e6f2ec;
+  --display:"Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --body:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141816; --panel:#1c211f; --fg:#e7ebe8; --muted:#9aa49f; --line:#323a36;
+  --accent:#4fb383; --accent-fg:#0d1511; --warn:#f0a35e; --warn-bg:#3a2715; --ok-bg:#183326; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141816; --panel:#1c211f; --fg:#e7ebe8; --muted:#9aa49f; --line:#323a36;
+  --accent:#4fb383; --accent-fg:#0d1511; --warn:#f0a35e; --warn-bg:#3a2715; --ok-bg:#183326; color-scheme:dark}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:640px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:grid;gap:18px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.01em;margin:0;text-wrap:balance}
+.next{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.next b{color:var(--fg);font-weight:500}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:grid;gap:12px}
+.label{font-family:var(--display);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+textarea{width:100%;box-sizing:border-box;min-height:110px;resize:vertical;font:14px/1.45 var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px}
+textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.seg button{flex:1 1 0;min-width:64px;padding:10px 8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;font:600 15px var(--display);letter-spacing:.02em;cursor:pointer}
+.seg button small{display:block;font:400 12px var(--body);color:var(--muted);letter-spacing:0}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.seg button[aria-pressed="true"] small{color:var(--accent-fg);opacity:.85}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.fields .wide{grid-column:1/-1}
+.f{display:grid;gap:3px;min-width:0}
+.f label{font-size:12px;color:var(--muted)}
+.f input{width:100%;box-sizing:border-box;font:14px var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:7px 8px}
+.f input.missing{border-color:var(--warn);background:var(--warn-bg)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted);cursor:pointer}
+.go{flex:1 1 220px;padding:14px;border:0;border-radius:7px;background:var(--accent);color:var(--accent-fg);font:700 18px var(--display);letter-spacing:.03em;cursor:pointer}
+.go:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:14px;padding:10px 12px;border-radius:6px}
+.status.ok{background:var(--ok-bg)}
+.status.warn{background:var(--warn-bg);color:var(--warn)}
+.warns{margin:0;padding:10px 12px 10px 30px;background:var(--warn-bg);color:var(--warn);border-radius:6px;font-size:14px;display:grid;gap:4px}
+.warns li::marker{content:"⚠  "}
+.log{font:13px/1.6 var(--mono);color:var(--muted);margin:0;padding:0;list-style:none}
+.log li{display:flex;gap:10px;min-width:0}
+.log li b{color:var(--fg);font-weight:500;flex:0 0 3.5em}
+.log li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+@media (max-width:420px){.fields{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head><body>
+
+<div class="wrap">
+  <header>
+    <h1>Z Brothers Rate Con</h1>
+    <div class="next">Next number: <b id="nextNum">…</b></div>
+  </header>
+
+  <section>
+    <div class="label">1 · Paste the broker line</div>
+    <textarea id="line" spellcheck="false">2. For $1600, 8 stackable REEFER pallets, 5000#, going to WCD Fontana / 5007-FONTANA TEMP CONTROL, 10288 Calabash Avenue, Fontana, CA 92335.  PO# 156662823.  Del appt sched for 11/3 @ 1 PM, Conf# F18275200.</textarea>
+    <div class="next" id="sampleNote">Example line shown. Paste over it.</div>
+  </section>
+
+  <section>
+    <div class="label">2 · Pickup from</div>
+    <div class="seg" id="locSeg">
+      <button type="button" data-v="greensburg" aria-pressed="true">Greensburg<small>Biscotti · by 3:30pm</small></button>
+      <button type="button" data-v="youngwood" aria-pressed="false">Youngwood<small>Catch Up · by 2pm</small></button>
+    </div>
+    <div class="label">Pickup day</div>
+    <div class="seg" id="daySeg">
+      <button type="button" data-v="1" aria-pressed="true">Mon</button>
+      <button type="button" data-v="2" aria-pressed="false">Tue</button>
+      <button type="button" data-v="3" aria-pressed="false">Wed</button>
+      <button type="button" data-v="4" aria-pressed="false">Thu</button>
+      <button type="button" data-v="5" aria-pressed="false">Fri</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="label">3 · Check what goes on the rate con</div>
+    <div class="fields">
+      <div class="f"><label for="f_number">Number</label><input id="f_number"></div>
+      <div class="f"><label for="f_rate">Total rate</label><input id="f_rate"></div>
+      <div class="f"><label for="f_pudate">Pickup date</label><input id="f_pudate"></div>
+      <div class="f"><label for="f_putime">Pickup time</label><input id="f_putime"></div>
+      <div class="f wide"><label for="f_cons">Consignee</label><input id="f_cons"></div>
+      <div class="f"><label for="f_deldate">Delivery date</label><input id="f_deldate"></div>
+      <div class="f"><label for="f_deltime">Delivery time</label><input id="f_deltime"></div>
+      <div class="f"><label for="f_po">PO#</label><input id="f_po"></div>
+      <div class="f"><label for="f_conf">Conf / Appt</label><input id="f_conf"></div>
+      <div class="f"><label for="f_wt">Weight</label><input id="f_wt"></div>
+      <div class="f"><label for="f_qty">QTY</label><input id="f_qty"></div>
+    </div>
+    <ul id="warns" class="warns" hidden></ul>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="isTest"> Test (don't count it)</label>
+      <button class="go" id="go" type="button">Save PDF</button>
+    </div>
+    <div id="status" class="status" hidden></div>
+  </section>
+
+  <section>
+    <div class="label">Recent rate cons</div>
+    <ul class="log" id="log"><li><span>Loading shared log…</span></li></ul>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const API = "https://script.google.com/macros/s/AKfycbyuTycVy6Qbc3Rf2JKfD4IWamXnTuwPW0ZYFDTvY9cvIF8jX7RALKam2VoDcOySIUsl/exec";
+const LOGO = "data:image/png;base64,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";
+const BILL_TO = ["Biscotti Brothers Bakery", "5142 US-30 #190,", "Greensburg, PA 15601"];
+const CARRIER = ["Z Brothers Trucking LLC", "10720 Memphis Ave", "Brooklyn, OH 44144"];
+const CARRIER2 = ["MC#: 562163", "PH: 216-916-9850", "Fax:216-939-8657"];
+const SHIPPERS = {
+  greensburg: { lines: BILL_TO, close: "3:30pm" },
+  youngwood: { lines: ["Catch Up Logistics", "105 Avenue A,", "Youngwood, PA 15697"], close: "2pm" },
+};
+const DAYNAMES = ["Sun","Mon","Tues","Wed","Thurs","Fri","Sat"];
+const SEED = { week: 85, load: 3, date: "2026-10-20" }; // last real rate con before this tool
+
+let loc = "greensburg", day = 1, db = null, last = SEED, recent = [];
+const $ = id => document.getElementById(id);
+
+function parse(raw){
+  const s = raw.split(/\s+/).join(" ").trim();
+  const d = { terms: s };
+  let m = s.match(/^(\d+)\.\s/); d.load = m ? m[1] : "";
+  m = s.match(/\$\s?([\d,]+(?:\.\d\d)?)/); d.rate = m ? "$" + m[1].replace(/,$/, "") : "";
+  m = s.match(/(\d+)\s+(?:[A-Za-z]+\s+){0,3}pallets?/i); d.qty = m ? m[1] + "plts" : "";
+  m = s.match(/([\d,]+)\s*(?:#|lbs?)/i); d.wt = m ? Number(m[1].replace(/,/g, "")).toLocaleString("en-US") + "lbs" : "";
+  m = s.match(/going to (.+?)\.\s+PO#/i); d.cons = m ? m[1].trim() : "";
+  m = s.match(/PO#\s*([\w-]+)/i); d.po = m ? m[1] : "";
+  m = s.match(/(Conf|Appt)#\s*([\w-]+)/i);
+  if (m) d.conf = m[1] + "# " + m[2];
+  else { m = s.match(/[AP]M,?\s+([A-Z0-9][\w-]*)\.?\s*$/i); d.conf = m ? m[1] : ""; }
+  m = s.match(/for\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*@\s*([\d:]+)\s*([AP]M)/i);
+  d.deldate = m ? m[1] : ""; d.deltime = m ? m[2] + m[3].toLowerCase() : "";
+  return d;
+}
+
+const iso = dt => dt.getFullYear() + "-" + String(dt.getMonth()+1).padStart(2,"0") + "-" + String(dt.getDate()).padStart(2,"0");
+const mdy = dt => (dt.getMonth()+1) + "/" + dt.getDate() + "/" + String(dt.getFullYear()).slice(2);
+function weekStart(dt){ const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); d.setDate(d.getDate()-d.getDay()); return d; } // weeks run Sunday–Saturday
+function parseIso(s){ const [y,mo,d] = s.split("-").map(Number); return new Date(y, mo-1, d); }
+
+// Week = last real rate con's week if it was this Sun–Sat week, otherwise last week + 1 (empty weeks are skipped).
+function currentWeek(){
+  const today = new Date();
+  return weekStart(parseIso(last.date)).getTime() === weekStart(today).getTime() ? last.week : last.week + 1;
+}
+function nextPickup(dow){
+  const t = new Date(); const d = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7)); return d;
+}
+
+const FIELDS = ["number","rate","pudate","putime","cons","deldate","deltime","po","conf","wt","qty"];
+let touched = new Set();
+function refresh(){
+  const d = parse($("line").value);
+  const pu = nextPickup(day);
+  const vals = {
+    number: d.load ? currentWeek() + "." + d.load : "",
+    rate: d.rate, pudate: mdy(pu), putime: DAYNAMES[day] + " by " + SHIPPERS[loc].close,
+    cons: d.cons, deldate: d.deldate, deltime: d.deltime, po: d.po, conf: d.conf, wt: d.wt, qty: d.qty,
+  };
+  for (const k of FIELDS){
+    const el = $("f_" + k);
+    if (!touched.has(k)) el.value = vals[k];
+    el.classList.toggle("missing", !el.value.trim());
+  }
+  $("nextNum").textContent = currentWeek() + "." + (d.load || "?");
+  renderWarns();
+}
+
+// Mistake checks: things that are probably wrong even when every box is filled.
+function mdToDate(s, ref){
+  const m = String(s).match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/); if (!m) return null;
+  let y = m[3] ? Number(m[3]) : ref.getFullYear(); if (y < 100) y += 2000;
+  return new Date(y, Number(m[1]) - 1, Number(m[2]));
+}
+function checks(){
+  const v = {}; for (const k of FIELDS) v[k] = $("f_" + k).value.trim();
+  const raw = $("line").value, w = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (!/^\s*\d+\.\s/.test(raw)) w.push("The line doesn't start with a load number like \"2.\" so the number can't be set. Type it in the Number box.");
+  if ((raw.match(/\$\s?\d/g) || []).length > 1 || (raw.match(/PO#/gi) || []).length > 1) w.push("This looks like more than one load pasted at once. Do one line at a time.");
+  const del = mdToDate(v.deldate, today), pu = mdToDate(v.pudate, today);
+  if (v.deldate && !del) w.push("Delivery date \"" + v.deldate + "\" isn't a date like 11/3.");
+  if (del && del < today) w.push("Delivery date " + v.deldate + " has already passed.");
+  if (del && pu && del < pu) w.push("Delivery (" + v.deldate + ") is before pickup (" + v.pudate + ").");
+  if (del && pu && del.getTime() === pu.getTime()) w.push("Delivery is the same day as pickup. Cross-country? Double-check.");
+  if (del && pu && (del - pu) / 864e5 > 21) w.push("Delivery is more than 3 weeks after pickup.");
+  const num = v.number, dupNum = recent.find(r => r.number === num && r.po !== v.po);
+  if (num && dupNum) w.push("Number " + num + " was already used for " + (dupNum.cons || "another load") + " (PO# " + dupNum.po + ").");
+  const dupPo = recent.find(r => v.po && r.po === v.po);
+  if (dupPo) w.push("PO# " + v.po + " already has a rate con (" + dupPo.number + "). Same load twice?");
+  if (num && !/^\d+\.\d+$/.test(num)) w.push("Number \"" + num + "\" should look like 85.2.");
+  const plts = parseInt(v.qty, 10), lbs = parseInt(v.wt.replace(/,/g, ""), 10), rate = parseFloat(v.rate.replace(/[$,]/g, ""));
+  if (plts && (plts < 1 || plts > 30)) w.push(plts + " pallets is outside the usual 1–30.");
+  if (lbs && lbs > 45000) w.push(v.wt + " is over a normal truckload.");
+  if (plts && lbs && (lbs / plts < 100 || lbs / plts > 2500)) w.push("Weight per pallet comes out to " + Math.round(lbs / plts).toLocaleString() + " lbs. Check the weight and pallet count.");
+  if (rate && (rate < 300 || rate > 10000)) w.push("Rate " + v.rate + " looks unusual. Check for a missing or extra digit.");
+  if (v.po && !/^\d{6,}$/.test(v.po)) w.push("PO# " + v.po + " doesn't look like the usual all-number PO.");
+  if (/\bached\b|\bshced\b|\bsched for\b.*\bsched for\b/i.test(raw)) w.push("The line has a typo (\"ached\"). The dates were still read; just confirm them.");
+  return w;
+}
+function renderWarns(){
+  const w = checks(), ul = $("warns"); ul.textContent = "";
+  for (const s of w){ const li = document.createElement("li"); li.textContent = s; ul.append(li); }
+  ul.hidden = !w.length;
+  return w;
+}
+
+function buildPdf(v, terms){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = 612, H = 792, SX = W/600, SY = H/750;
+  const X = p => p*SX, Y = p => p*SY;
+  const txt = (px, py, s, size=10, style="bold") => { doc.setFont("helvetica", style); doc.setFontSize(size); doc.text(String(s), X(px), Y(py)); };
+  const hl = (x1, x2, py, w=0.6) => { doc.setLineWidth(w); doc.line(X(x1), Y(py), X(x2), Y(py)); };
+  const vl = (px, y1, y2, w=0.6) => { doc.setLineWidth(w); doc.line(X(px), Y(y1), X(px), Y(y2)); };
+  const wrap = (s, n) => { const out = []; let cur = ""; for (const w of s.split(" ")) { if ((cur + " " + w).trim().length > n && cur) { out.push(cur); cur = w; } else cur = (cur + " " + w).trim(); } if (cur) out.push(cur); return out; };
+  doc.setDrawColor(115);
+  doc.addImage(LOGO, "PNG", X(110), Y(14), X(196)-X(110), Y(103)-Y(14));
+  txt(400, 37, "RATE CONFIRMATION"); txt(465, 62, "Number: " + v.number); txt(437, 102, "Date: " + mdy(new Date()));
+  const L = 70, M = 310, R = 549;
+  hl(L,R,109); hl(L,R,255); hl(L,R,347); hl(L,R,383); hl(L,R,418,1.4);
+  vl(L,109,418); vl(R,109,418); vl(M,109,383);
+  txt(77,121,"BILL TO:"); BILL_TO.forEach((s,i)=>txt(77,155+i*15,s,9.5));
+  txt(315,121,"CARRIER:"); CARRIER.forEach((s,i)=>txt(315,155+i*15,s,9.5)); CARRIER2.forEach((s,i)=>txt(315,212+i*15,s,9.5));
+  txt(77,266,"SHIPPER:"); SHIPPERS[loc].lines.forEach((s,i)=>txt(79,282+i*18,s,9.5));
+  txt(315,266,"CONSIGNEE:"); wrap(v.cons,40).slice(0,4).forEach((s,i)=>txt(315,282+i*15,s,9.5));
+  hl(L,R,365,0.4);
+  txt(77,358,"Pick Up Date: " + v.pudate); txt(77,375,"Time: " + v.putime);
+  txt(315,358,"Delivery Date: " + v.deldate); txt(315,375,"Time: " + v.deltime);
+  txt(77,394,"Special Instructions "); doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  const w = doc.getTextWidth("Special Instructions "); doc.setFont("helvetica","bolditalic"); doc.text("(optional)", X(77)+w, Y(394));
+  txt(82,410,[v.po ? "PO# " + v.po : "", v.conf].filter(Boolean).join("  "));
+  const cols = [L,190,310,430,R];
+  [440,462,482,502,522].forEach(py=>hl(L,R,py,0.4)); cols.forEach(px=>vl(px,418,522,0.4));
+  ["Description","Type","Weight","QTY"].forEach((s,i)=>txt(cols[i]+6,434,s));
+  txt(76,514,"Total"); txt(314,515,v.wt,9); txt(434,515,v.qty,9);
+  txt(70,556,"RATE"); txt(262,556,"ADDITIONAL TERMS & CONDITIONS");
+  [565,588,611,643].forEach(py=>hl(70,257,py,0.4)); [70,155,257].forEach(px=>vl(px,565,643,0.4));
+  txt(76,580,"Line Haul:"); txt(160,580,"$"); txt(76,603,"Adjustments:"); txt(160,603,"$");
+  txt(76,624,"TOTAL"); txt(76,637,"RATE:"); txt(160,624,v.rate || "$");
+  hl(263,549,565,0.4); hl(263,549,643,0.4); vl(263,565,643,0.4); vl(549,565,643,0.4);
+  let lines = wrap(terms,50), size = 9.5, step = 12;
+  if (lines.length > 5){ lines = wrap(terms,60); size = 8; step = 10; }
+  lines.slice(0,7).forEach((s,i)=>txt(269,580+i*step,s,size));
+  return doc.output("blob");
+}
+
+function showStatus(msg, kind){ const el = $("status"); el.textContent = msg; el.className = "status " + kind; el.hidden = false; }
+
+function renderLog(){
+  const ul = $("log"); ul.textContent = "";
+  const rows = recent.length ? recent : [{ number: SEED.week + "." + SEED.load, date: SEED.date, cons: "WCD Palmdale 5027" }];
+  for (const r of rows.slice(0, 8)){
+    const li = document.createElement("li");
+    const b = document.createElement("b"); b.textContent = r.number;
+    const sp = document.createElement("span"); sp.textContent = mdy(parseIso(r.date)) + " · " + (r.cons || "");
+    li.append(b, sp); ul.append(li);
+  }
+}
+
+function setLog(rows){
+  recent = rows || [];
+  if (recent.length) last = { week: Number(recent[0].week), load: Number(recent[0].load), date: recent[0].date };
+  renderLog(); refresh();
+}
+async function loadLog(){
+  try {
+    const r = await fetch(API + "?action=log");
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "unknown error");
+    setLog(j.log);
+  } catch (e) { showStatus("Couldn't read the shared log: " + e.message + ". Numbers may be off.", "warn"); }
+}
+
+$("go").addEventListener("click", async () => {
+  const v = {}; for (const k of FIELDS) v[k] = $("f_" + k).value.trim();
+  const missing = FIELDS.filter(k => !v[k]);
+  const warns = renderWarns();
+  if ((missing.length || warns.length) && !confirmMissing) {
+    confirmMissing = true;
+    showStatus((missing.length ? "Some boxes are empty (highlighted). " : "") + (warns.length ? "Check the warnings above. " : "") + "Fix them, or tap Save PDF again to make it anyway.", "warn");
+    return;
+  }
+  confirmMissing = false;
+  const terms = $("line").value.split(/\s+/).join(" ").trim();
+  let blob;
+  try { blob = buildPdf(v, terms); } catch (e) { showStatus("Couldn't build the PDF: " + e.message, "warn"); return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "RateCon_" + v.number + ".pdf";
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  if ($("isTest").checked) { showStatus("Saved " + v.number + " as a test. It wasn't counted.", "ok"); return; }
+  const [wk, ld] = v.number.split(".");
+  const rec = { number: v.number, week: Number(wk), load: Number(ld) || 0, date: iso(new Date()), cons: v.cons, po: v.po, ts: Date.now() };
+  try {
+    const r = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "add", rec }) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "unknown error");
+    setLog(j.log); showStatus("Saved RateCon_" + v.number + ".pdf and added it to the shared log.", "ok");
+  } catch (e) {
+    showStatus("Saved the PDF, but couldn't add " + v.number + " to the shared log: " + e.message, "warn");
+  }
+});
+let confirmMissing = false;
+
+for (const [segId, set] of [["locSeg", v => loc = v], ["daySeg", v => day = Number(v)]]) {
+  $(segId).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    for (const x of $(segId).querySelectorAll("button")) x.setAttribute("aria-pressed", x === b ? "true" : "false");
+    set(b.dataset.v); touched.delete("pudate"); touched.delete("putime"); refresh();
+  });
+}
+$("line").addEventListener("input", () => { touched.clear(); confirmMissing = false; $("sampleNote").hidden = true; refresh(); });
+for (const k of FIELDS) $("f_" + k).addEventListener("input", () => { touched.add(k); confirmMissing = false; $("f_" + k).classList.toggle("missing", !$("f_" + k).value.trim()); renderWarns(); });
+
+refresh(); renderLog();
+loadLog(); setInterval(loadLog, 60000);
+</script>
+
+</body></html>
