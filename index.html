@@ -39,6 +39,8 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .f{display:grid;gap:3px;min-width:0}
 .f label{font-size:12px;color:var(--muted)}
 .f input{width:100%;box-sizing:border-box;font:14px var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:7px 8px}
+.f input[type="checkbox"]{width:auto;padding:0}
+.f .check{padding:7px 0}
 .f input.missing{border-color:var(--warn);background:var(--warn-bg)}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .check{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted);cursor:pointer}
@@ -53,6 +55,24 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 .log li{display:flex;gap:10px;min-width:0}
 .log li b{color:var(--fg);font-weight:500;flex:0 0 3.5em}
 .log li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line)}
+.tabs button{padding:10px 14px;border:0;border-bottom:3px solid transparent;background:none;color:var(--muted);font:600 16px var(--display);letter-spacing:.02em;cursor:pointer;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.view{display:grid;gap:18px}
+.ghost{padding:9px 12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;font:600 14px var(--body);cursor:pointer}
+.upload{display:inline-block}
+.go.small{flex:0 1 auto;padding:10px 16px;font-size:16px}
+.pad{width:100%;height:auto;aspect-ratio:10/3;background:#fff;border:1px dashed var(--line);border-radius:6px;touch-action:none;cursor:crosshair}
+.sigbox{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;display:flex;justify-content:center}
+.sigbox img{max-height:90px}
+.drop{display:grid;place-items:center;gap:4px;padding:28px 12px;border:2px dashed var(--line);border-radius:8px;background:var(--bg);cursor:pointer;text-align:center}
+.drop b{font:700 18px var(--display)}
+.drop span{color:var(--muted);font-size:14px}
+.drop.over{border-color:var(--accent);background:var(--ok-bg)}
+.row.between{justify-content:space-between}
+.pager{display:flex;align-items:center;gap:8px}
+.previewWrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;max-height:75vh}
+#preview{display:block;width:100%;height:auto;cursor:copy}
 @media (max-width:420px){.fields{grid-template-columns:minmax(0,1fr)}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -61,8 +81,13 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 <div class="wrap">
   <header>
     <h1>Z Brothers Rate Con</h1>
-    <div class="next">Next number: <b id="nextNum">…</b></div>
+    <div class="next" id="nextWrap">Next number: <b id="nextNum">…</b></div>
   </header>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabMake" aria-selected="true">Make a rate con</button>
+    <button type="button" role="tab" id="tabSign" aria-selected="false">Sign a rate con</button>
+  </div>
+  <div id="makeView" class="view">
 
   <section>
     <div class="label">1 · Paste the broker line</div>
@@ -113,9 +138,65 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
     <div class="label">Recent rate cons</div>
     <ul class="log" id="log"><li><span>Loading shared log…</span></li></ul>
   </section>
+  </div>
+
+  <div id="signView" class="view" hidden>
+    <section>
+      <div class="label">1 · Your signature</div>
+      <div id="sigSaved" hidden>
+        <div class="sigbox"><img id="sigImg" alt="Your saved signature"></div>
+        <div class="row">
+          <button type="button" class="ghost" id="sigRedo">Draw a new one</button>
+          <span class="next">Saved on this device only.</span>
+        </div>
+      </div>
+      <div id="sigDraw">
+        <canvas id="sigPad" class="pad" width="600" height="180" aria-label="Draw your signature here"></canvas>
+        <div class="row">
+          <button type="button" class="ghost" id="sigClear">Clear</button>
+          <label class="ghost upload">Upload a picture instead<input type="file" id="sigUpload" accept="image/*" hidden></label>
+          <button type="button" class="go small" id="sigSave">Save signature</button>
+        </div>
+        <div class="next">Sign with your finger or mouse in the box.</div>
+      </div>
+      <div class="fields">
+        <div class="f"><label for="sigName">Printed name (optional)</label><input id="sigName" placeholder="e.g. Mark Z."></div>
+        <div class="f"><label for="sigDateOn">Today's date</label>
+          <label class="check"><input type="checkbox" id="sigDateOn" checked> Add next to signature</label></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="label">2 · Drop the broker's rate con</div>
+      <label class="drop" id="drop">
+        <input type="file" id="pdfIn" accept="application/pdf" hidden>
+        <b>Drag a PDF here</b><span>or tap to choose a file</span>
+      </label>
+      <div id="signWork" hidden>
+        <div class="row between">
+          <div class="next" id="spotNote"></div>
+          <div class="pager">
+            <button type="button" class="ghost" id="pgPrev" aria-label="Previous page">‹</button>
+            <span id="pgLabel" class="next"></span>
+            <button type="button" class="ghost" id="pgNext" aria-label="Next page">›</button>
+          </div>
+        </div>
+        <div class="previewWrap"><canvas id="preview"></canvas></div>
+        <div class="next">Wrong spot? Tap anywhere on the page to move the signature there.</div>
+        <div class="row">
+          <button type="button" class="ghost" id="sigSmaller">Smaller</button>
+          <button type="button" class="ghost" id="sigBigger">Bigger</button>
+          <button class="go" id="signGo" type="button">Save signed PDF</button>
+        </div>
+      </div>
+      <div id="signStatus" class="status" hidden></div>
+    </section>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script>
 const API = "https://script.google.com/macros/s/AKfycbyuTycVy6Qbc3Rf2JKfD4IWamXnTuwPW0ZYFDTvY9cvIF8jX7RALKam2VoDcOySIUsl/exec";
 const LOGO = "data:image/png;base64,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";
@@ -334,4 +415,210 @@ refresh(); renderLog();
 loadLog(); setInterval(loadLog, 60000);
 </script>
 
+
+<script>
+// ---------- Tabs ----------
+(function(){
+  const tabs = { make: document.getElementById("tabMake"), sign: document.getElementById("tabSign") };
+  function show(which){
+    for (const k of ["make","sign"]) {
+      tabs[k].setAttribute("aria-selected", k === which ? "true" : "false");
+      document.getElementById(k + "View").hidden = k !== which;
+    }
+    document.getElementById("nextWrap").hidden = which !== "make";
+    try { localStorage.setItem("zbt_tab", which); } catch (e) {}
+  }
+  tabs.make.addEventListener("click", () => show("make"));
+  tabs.sign.addEventListener("click", () => show("sign"));
+  let saved = null; try { saved = localStorage.getItem("zbt_tab"); } catch (e) {}
+  if (location.hash === "#sign" || saved === "sign") show("sign");
+})();
+
+// ---------- Sign a rate con ----------
+(function(){
+  const $ = id => document.getElementById(id);
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const store = {
+    get(k){ try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+  };
+  let sigData = store.get("zbt_sig");          // data URL of the signature image
+  let sigImgEl = null, sigAspect = 3;          // width / height
+  let pdfBytes = null, pdfName = "", pdfDoc = null, pageNum = 1, viewport = null;
+  let place = null;                            // {page, x, y} bottom-left of signature, PDF units
+  let sigW = 140;                              // signature width in PDF points
+
+  function status(msg, kind){ const el = $("signStatus"); el.textContent = msg; el.className = "status " + kind; el.hidden = !msg; }
+
+  // Signature pad
+  const pad = $("sigPad"), ctx = pad.getContext("2d");
+  let drawing = false, drewSomething = false, lastPt = null;
+  function resetPad(){ ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, pad.width, pad.height); drewSomething = false; }
+  resetPad();
+  function padPt(e){ const r = pad.getBoundingClientRect(); return { x: (e.clientX - r.left) * pad.width / r.width, y: (e.clientY - r.top) * pad.height / r.height }; }
+  pad.addEventListener("pointerdown", e => { drawing = true; lastPt = padPt(e); pad.setPointerCapture(e.pointerId); });
+  pad.addEventListener("pointermove", e => {
+    if (!drawing) return; const p = padPt(e);
+    ctx.strokeStyle = "#0b1f4d"; ctx.lineWidth = 3.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(lastPt.x, lastPt.y); ctx.lineTo(p.x, p.y); ctx.stroke(); lastPt = p; drewSomething = true;
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(t => pad.addEventListener(t, () => { drawing = false; }));
+  $("sigClear").addEventListener("click", resetPad);
+
+  // Crop to the ink and make the background transparent.
+  function trimPad(){
+    const { width: w, height: h } = pad, d = ctx.getImageData(0, 0, w, h);
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, ink = d.data[i] < 200 || d.data[i+1] < 200 || d.data[i+2] < 200;
+      if (ink) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      else d.data[i+3] = 0;
+    }
+    if (x1 < 0) return null;
+    const pad2 = 6; x0 = Math.max(0, x0 - pad2); y0 = Math.max(0, y0 - pad2); x1 = Math.min(w - 1, x1 + pad2); y1 = Math.min(h - 1, y1 + pad2);
+    const tmp = document.createElement("canvas"); tmp.width = w; tmp.height = h; tmp.getContext("2d").putImageData(d, 0, 0);
+    const out = document.createElement("canvas"); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+    out.getContext("2d").drawImage(tmp, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    return out.toDataURL("image/png");
+  }
+  function useSig(dataUrl){
+    sigData = dataUrl;
+    const img = new Image();
+    img.onload = () => { sigImgEl = img; sigAspect = img.naturalWidth / img.naturalHeight || 3; drawPreview(); };
+    img.src = dataUrl; $("sigImg").src = dataUrl;
+    $("sigSaved").hidden = false; $("sigDraw").hidden = true;
+  }
+  $("sigSave").addEventListener("click", () => {
+    if (!drewSomething) { status("Draw your signature in the box first.", "warn"); return; }
+    const url = trimPad(); if (!url) { status("Draw your signature in the box first.", "warn"); return; }
+    if (!store.set("zbt_sig", url)) status("Signature will work now, but this browser won't remember it next time.", "warn"); else status("", "ok");
+    useSig(url);
+  });
+  $("sigUpload").addEventListener("change", e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader(); r.onload = () => { store.set("zbt_sig", r.result); useSig(r.result); }; r.readAsDataURL(f);
+  });
+  $("sigRedo").addEventListener("click", () => { $("sigSaved").hidden = true; $("sigDraw").hidden = false; resetPad(); });
+  const savedName = store.get("zbt_sig_name"); if (savedName) $("sigName").value = savedName;
+  $("sigName").addEventListener("input", () => { store.set("zbt_sig_name", $("sigName").value); drawPreview(); });
+  $("sigDateOn").addEventListener("change", drawPreview);
+  if (sigData) useSig(sigData);
+
+  // PDF in
+  const drop = $("drop");
+  ["dragenter","dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) openPdf(f); });
+  $("pdfIn").addEventListener("change", e => { const f = e.target.files[0]; if (f) openPdf(f); e.target.value = ""; });
+
+  async function openPdf(file){
+    if (!/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) { status("That isn't a PDF. Drop the rate con PDF the broker sent.", "warn"); return; }
+    if (!window.pdfjsLib || !window.PDFLib) { status("The PDF tools didn't load. Check your internet and refresh the page.", "warn"); return; }
+    status("Opening " + file.name + "…", "ok");
+    try {
+      pdfBytes = await file.arrayBuffer(); pdfName = file.name.replace(/\.pdf$/i, "");
+      pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice(0) }).promise;
+      const found = await findSpot();
+      if (found) { place = found.place; pageNum = found.place.page; $("spotNote").textContent = "Found \"" + found.label + "\" on page " + pageNum + "."; }
+      else {
+        pageNum = pdfDoc.numPages;
+        const pg = await pdfDoc.getPage(pageNum), vb = pg.view;
+        place = { page: pageNum, x: vb[0] + 60, y: vb[1] + 90 };
+        $("spotNote").textContent = "Couldn't find a signature line. Tap where the signature goes.";
+      }
+      $("signWork").hidden = false; status("", "ok");
+      await drawPreview();
+    } catch (e) {
+      status("Couldn't open that PDF: " + (e && e.message || e), "warn");
+    }
+  }
+
+  // Look for the carrier's signature line.
+  async function findSpot(){
+    let best = null;
+    for (let n = 1; n <= pdfDoc.numPages; n++) {
+      const page = await pdfDoc.getPage(n), tc = await page.getTextContent(), vb = page.view;
+      for (const it of tc.items) {
+        const t = (it.str || "").trim(); if (!t) continue;
+        if (!/signature|sign here|signed by|authorized sign/i.test(t)) continue;
+        let score = n * 0.1;
+        if (/carrier/i.test(t)) score += 3;
+        if (/broker|shipper|consignee|receiver/i.test(t)) score -= 3;
+        if (/sign here/i.test(t)) score += 1;
+        if (t.length > 60) score -= 2;   // a sentence that mentions signing, not a label
+        const x = it.transform[4], y = it.transform[5], w = it.width || t.length * 5;
+        let px = x + w + 8, py = y - 3;
+        const sh = sigW / sigAspect;
+        if (px + sigW > vb[2] - 10) { px = x; py = y - sh - 6; }
+        if (!best || score >= best.score) best = { score, label: t.length > 40 ? t.slice(0, 40) + "…" : t, place: { page: n, x: px, y: py } };
+      }
+    }
+    return best;
+  }
+
+  async function drawPreview(){
+    if (!pdfDoc) return;
+    const page = await pdfDoc.getPage(pageNum);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(2, 1100 / base.width);
+    viewport = page.getViewport({ scale });
+    const c = $("preview"), g = c.getContext("2d");
+    c.width = Math.floor(viewport.width); c.height = Math.floor(viewport.height);
+    await page.render({ canvasContext: g, viewport }).promise;
+    $("pgLabel").textContent = "Page " + pageNum + " of " + pdfDoc.numPages;
+    $("pgPrev").disabled = pageNum <= 1; $("pgNext").disabled = pageNum >= pdfDoc.numPages;
+    if (place && place.page === pageNum) {
+      const sh = sigW / sigAspect;
+      const [ax, ay] = viewport.convertToViewportPoint(place.x, place.y + sh);
+      const [bx, by] = viewport.convertToViewportPoint(place.x + sigW, place.y);
+      const left = Math.min(ax, bx), top = Math.min(ay, by), w = Math.abs(bx - ax), h = Math.abs(by - ay);
+      g.save(); g.strokeStyle = "rgba(31,107,71,.8)"; g.setLineDash([6, 4]); g.lineWidth = 2; g.strokeRect(left - 4, top - 4, w + 8, h + 8); g.restore();
+      if (sigImgEl) g.drawImage(sigImgEl, left, top, w, h);
+      else { g.fillStyle = "rgba(31,107,71,.15)"; g.fillRect(left, top, w, h); g.fillStyle = "#1f6b47"; g.font = (14 * scale / 1.5) + "px sans-serif"; g.fillText("Signature goes here", left + 6, top + h / 2); }
+      g.fillStyle = "#111"; g.font = (10 * scale) + "px Helvetica, Arial, sans-serif";
+      if ($("sigDateOn").checked) { const [dx, dy] = viewport.convertToViewportPoint(place.x + sigW + 8, place.y + 4); g.fillText(todayStr(), dx, dy); }
+      const nm = $("sigName").value.trim();
+      if (nm) { g.font = (9 * scale) + "px Helvetica, Arial, sans-serif"; const [nx, ny] = viewport.convertToViewportPoint(place.x, place.y - 10); g.fillText(nm, nx, ny); }
+    }
+  }
+  function todayStr(){ const d = new Date(); return (d.getMonth() + 1) + "/" + d.getDate() + "/" + String(d.getFullYear()).slice(2); }
+
+  $("preview").addEventListener("click", e => {
+    if (!viewport) return;
+    const c = $("preview"), r = c.getBoundingClientRect();
+    const cx = (e.clientX - r.left) * c.width / r.width, cy = (e.clientY - r.top) * c.height / r.height;
+    const [px, py] = viewport.convertToPdfPoint(cx, cy);
+    place = { page: pageNum, x: px, y: py - (sigW / sigAspect) / 2 };
+    $("spotNote").textContent = "Signature moved to page " + pageNum + ".";
+    drawPreview();
+  });
+  $("pgPrev").addEventListener("click", () => { if (pageNum > 1) { pageNum--; drawPreview(); } });
+  $("pgNext").addEventListener("click", () => { if (pdfDoc && pageNum < pdfDoc.numPages) { pageNum++; drawPreview(); } });
+  $("sigSmaller").addEventListener("click", () => { sigW = Math.max(60, sigW - 20); drawPreview(); });
+  $("sigBigger").addEventListener("click", () => { sigW = Math.min(300, sigW + 20); drawPreview(); });
+
+  $("signGo").addEventListener("click", async () => {
+    if (!sigData) { status("Save your signature in step 1 first.", "warn"); return; }
+    if (!pdfBytes || !place) { status("Drop a rate con PDF first.", "warn"); return; }
+    try {
+      const { PDFDocument, StandardFonts, rgb } = PDFLib;
+      const doc = await PDFDocument.load(pdfBytes.slice(0), { ignoreEncryption: true });
+      const img = /^data:image\/jpe?g/i.test(sigData) ? await doc.embedJpg(sigData) : await doc.embedPng(sigData);
+      const page = doc.getPages()[place.page - 1], sh = sigW / sigAspect;
+      page.drawImage(img, { x: place.x, y: place.y, width: sigW, height: sh });
+      const font = await doc.embedFont(StandardFonts.Helvetica);
+      if ($("sigDateOn").checked) page.drawText(todayStr(), { x: place.x + sigW + 8, y: place.y + 4, size: 10, font, color: rgb(0, 0, 0) });
+      const nm = $("sigName").value.trim();
+      if (nm) page.drawText(nm, { x: place.x, y: place.y - 10, size: 9, font, color: rgb(0, 0, 0) });
+      const out = await doc.save();
+      const blob = new Blob([out], { type: "application/pdf" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = pdfName + "_SIGNED.pdf";
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      status("Saved " + pdfName + "_SIGNED.pdf. Open it once to check before sending it back.", "ok");
+    } catch (e) {
+      status("Couldn't sign that PDF: " + (e && e.message || e) + ". If it's password-protected, ask the broker for an unlocked copy.", "warn");
+    }
+  });
+})();
+</script>
 </body></html>
