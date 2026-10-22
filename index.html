@@ -283,7 +283,7 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
     <div class="modal" id="notFound" hidden role="dialog" aria-modal="true" aria-labelledby="nfTitle">
       <div class="modalCard">
         <b id="nfTitle">Couldn't find a signature line</b>
-        <p>No "Carrier Signature" or similar line was found in this PDF. Your signature is on the page. Drag it to where it goes and resize it with the corner dot.</p>
+        <p id="nfText"></p>
         <button type="button" class="go small" id="nfOk">Got it</button>
       </div>
     </div>
@@ -690,6 +690,9 @@ loadLog(); setInterval(loadLog, 60000);
         const pg = await pdfDoc.getPage(pageNum), vb = pg.view, w = 150;
         place = { page: pageNum, w, x: (vb[0] + vb[2]) / 2 - w / 2, y: (vb[1] + vb[3]) / 2 };
         $("spotNote").textContent = "Drag your signature to where it goes.";
+        $("nfText").textContent = scannedOnly
+          ? "This PDF is a scanned picture, so there are no words to search. Your signature is on the last page. Drag it onto the signature line and resize it with the corner dot."
+          : "No signature line was found in this PDF. Your signature is on the last page. Drag it to where it goes and resize it with the corner dot.";
         $("notFound").hidden = false; $("nfOk").focus();
       }
       status("");
@@ -702,13 +705,20 @@ loadLog(); setInterval(loadLog, 60000);
   $("notFound").addEventListener("click", e => { if (e.target === $("notFound")) $("notFound").hidden = true; });
 
   // ---- Find the carrier/dispatcher signature line ----
-  const STRONG = [
-    /(carrier|dispatch(?:er)?|driver|motor\s*carrier|trucking|accepted\s*by)(?:'s)?\W{0,3}(?:[a-z]+\s+){0,2}?(signature|sign(?:ed)?\b)/i,
-    /(signature|sign)\W{0,5}(?:of\s+|by\s+)?(?:the\s+)?(carrier|dispatch(?:er)?)/i,
+  // Words that mark where the carrier signs. Higher weight = more likely the carrier's spot.
+  const SIGN_WORDS = [
+    // explicitly the carrier / dispatcher / driver
+    [10, /\b(?:carrier|dispatch(?:er)?|driver|motor\s*carrier|trucking(?:\s*co(?:mpany)?)?|owner[\s-]*operator|transporter|hauler)(?:'s)?\W{0,3}(?:[a-z]+\s+){0,2}?(?:signature|sign(?:ed|er)?|sig\b\.?|initials?|authori[sz]ation|acceptance|approval)\b/gi],
+    [10, /\b(?:signature|signed|sign|sig\.?)\s*(?:(?:of|by|for)\s+(?:the\s+)?|\(\s*)(?:carrier|dispatch(?:er)?|driver|motor\s*carrier|transporter)\b/gi],
+    [9,  /\b(?:accepted|agreed|acknowledged|confirmed|approved|authori[sz]ed)\s*(?:and\s+(?:accepted|agreed)\s*)?(?:by|for)\b/gi],
+    [8,  /\b(?:carrier|dispatch(?:er)?)\s*(?:rep(?:resentative)?|acceptance|agreement|approval|confirmation)\b/gi],
+    // general signing words
+    [6,  /\b(?:signature|signed(?:\s*(?:by|name|here))?|sign(?:\s*(?:here|below|above|and\s+return|&\s*return|name))?|sig\.?|e[\s-]?sign(?:ature|ed)?|autograph)\b/gi],
+    [5,  /\b(?:authori[sz]ed\s*(?:rep(?:resentative)?|person|agent|official|party)|acceptance|accepted|agreed\s*(?:to|upon)?|acknowledg(?:ed|ement))\b/gi],
+    [4,  /\bx\s*_{3,}/gi],
   ];
-  const WEAK = /signature|please\s+sign|sign\s*(?:here|below)|authori[sz]ed\s*sign/i;
-  const OTHER = /broker|shipper|consignee|receiver|customer/i;
-
+  const OTHER = /\b(?:broker|shipper|consignee|receiver|customer|warehouse|consignor|3pl|logistics\s*rep)\b/i;
+  const NOT_A_SPOT = /\b(?:print(?:ed)?\s*name|name\s*\(print|title|date|phone|email|fax)\b\W*$/i;
   function mul(m, n){ return [m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5]]; }
   function tp(m, x, y){ return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
 
@@ -755,11 +765,13 @@ loadLog(); setInterval(loadLog, 60000);
     return segs;
   }
 
+  let scannedOnly = false;
   async function findSpot(){
-    let best = null;
+    let best = null, anyText = false;
     for (let n = 1; n <= pdfDoc.numPages; n++) {
       const page = await pdfDoc.getPage(n), tc = await page.getTextContent();
       const items = tc.items.filter(i => i.str && i.str.trim()).map(i => ({ str: i.str, x: i.transform[4], y: i.transform[5], width: i.width || i.str.length * 5, size: Math.hypot(i.transform[2], i.transform[3]) || 10 }));
+      if (items.length) anyText = true;
       // group into text lines so "Carrier" + "Signature" split across pieces still match
       const rows = [];
       for (const it of items.slice().sort((a, b) => b.y - a.y || a.x - b.x)) {
@@ -772,27 +784,36 @@ loadLog(); setInterval(loadLog, 60000);
         row.parts.sort((a, b) => a.x - b.x);
         let text = "", map = [];
         for (const p of row.parts) { const s0 = text.length; text += (text ? " " : "") + p.str; map.push([s0 + (s0 ? 1 : 0), text.length, p]); }
-        let m = STRONG[0].exec(text) || STRONG[1].exec(text), strong = !!m;
-        if (!m) m = WEAK.exec(text);
-        if (!m) continue;
-        if (!strong && /carrier|dispatch/i.test(text)) strong = true;
-        const before = text.slice(Math.max(0, m.index - 25), m.index + m[0].length);
-        let score = strong ? 10 : 2;
-        if (OTHER.test(before) && !/carrier|dispatch/i.test(m[0])) score -= 8;
-        if (text.length > 90) score -= 4;        // a sentence about signing, not a label
-        score += n * 0.1;
         const at = idx => (map.find(([a, b]) => idx >= a && idx < b) || map[map.length - 1])[2];
-        const first = at(m.index), lastP = at(m.index + m[0].length - 1);
-        const per = lastP.width / Math.max(1, lastP.str.length);
-        const endIdx = m.index + m[0].length - map.find(r => r[2] === lastP)[0];
-        const lx0 = first.x, lx1 = Math.min(lastP.x + lastP.width, lastP.x + per * (endIdx + 1)), ly = row.y, fs = lastP.size;
-        if (best && score < best.score) continue;
-        if (!segs) segs = await horizontalLines(page, items);
-        const spot = pickLine(segs, lx0, lx1, ly, fs, page.view);
-        const label = m[0].replace(/\s+/g, " ").replace(/[:\s]+$/, "");
-        best = { score, label: label.length > 40 ? label.slice(0, 40) + "…" : label, place: { page: n, ...spot } };
+        const seen = new Set();
+        for (const [weight, re] of SIGN_WORDS) {
+          re.lastIndex = 0; let m;
+          while ((m = re.exec(text))) {
+            if (seen.has(m.index)) continue; seen.add(m.index);
+            const near = text.slice(Math.max(0, m.index - 30), m.index + m[0].length + 10);
+            let score = weight;
+            if (weight < 8 && /carrier|dispatch|driver|motor\s*carrier/i.test(text)) score += 3;   // carrier named on the same row
+            if (OTHER.test(near) && !/carrier|dispatch|driver/i.test(m[0])) score -= 9;          // the broker's/shipper's line
+            if (text.length > 110) score -= 5;                                                  // a paragraph that mentions signing
+            else if (text.length > 70) score -= 2;
+            if (NOT_A_SPOT.test(text.slice(0, m.index + m[0].length))) score -= 3;
+            if (score < 2) continue;
+            const first = at(m.index), lastP = at(m.index + m[0].length - 1);
+            const per = lastP.width / Math.max(1, lastP.str.length);
+            const endIdx = m.index + m[0].length - map.find(r => r[2] === lastP)[0];
+            const lx0 = first.x, lx1 = Math.min(lastP.x + lastP.width, lastP.x + per * endIdx), ly = row.y, fs = lastP.size;
+            if (!segs) segs = await horizontalLines(page, items);
+            const spot = pickLine(segs, lx0, lx1, ly, fs, page.view);
+            if (spot.onLine) score += 3;                                                        // there's an actual line to sign on
+            score += n * 0.05 + (800 - ly) * 0.0005;                                            // later page / lower on page wins ties
+            if (best && score < best.score) continue;
+            const label = m[0].replace(/_+/g, "").replace(/\s+/g, " ").replace(/[:\s]+$/, "").trim() || "signature";
+            best = { score, label: label.length > 40 ? label.slice(0, 40) + "…" : label, place: { page: n, x: spot.x, y: spot.y, w: spot.w } };
+          }
+        }
       }
     }
+    scannedOnly = !anyText;
     return best;
   }
 
@@ -802,13 +823,21 @@ loadLog(); setInterval(loadLog, 60000);
     // 1) a line on the same row, right after the label
     let c = flat.filter(s => s.y > ly - fs * 0.8 && s.y < ly + fs * 0.5 && s.x2 > lx1 + 25 && s.x1 > lx0 - 5)
                 .sort((a, b) => Math.abs(a.x1 - lx1) - Math.abs(b.x1 - lx1))[0];
-    if (c) { const x1 = Math.max(c.x1, lx1 + 4), { w } = sizeFor(c.x2 - x1); return { x: x1 + 4, y: c.y + 1.5, w }; }
+    if (c) { const x1 = Math.max(c.x1, lx1 + 4), { w } = sizeFor(c.x2 - x1); return { x: x1 + 4, y: c.y + 1.5, w, onLine: true }; }
+    // 1b) label sits at the top of a box/cell: sign inside the box, under the label
+    const box = segs.filter(b => b.box && b.x1 <= lx0 + 2 && b.x2 >= lx1 - 2 && b.y < ly && b.top >= ly - 2 && b.top - b.y < 140 && ly - b.y > 18)
+                    .sort((a, b) => (a.x2 - a.x1) * (a.top - a.y) - (b.x2 - b.x1) * (b.top - b.y))[0];
+    if (box) {
+      const room = ly - fs * 0.4 - box.y - 6;
+      let { w } = sizeFor(box.x2 - box.x1); if (w / sigAspect > room) w = Math.max(40, room * sigAspect);
+      return { x: Math.max(box.x1 + 6, lx0), y: box.y + 4, w, onLine: true };
+    }
     // 2) a line just above the label (label printed under the line)
     c = flat.filter(s => s.y > ly + fs * 0.5 && s.y < ly + 45 && s.x1 < lx1 && s.x2 > lx0).sort((a, b) => a.y - b.y)[0];
-    if (c) { const { w } = sizeFor(c.x2 - c.x1); return { x: Math.max(c.x1 + 4, lx0), y: c.y + 1.5, w }; }
+    if (c) { const { w } = sizeFor(c.x2 - c.x1); return { x: Math.max(c.x1 + 4, lx0), y: c.y + 1.5, w, onLine: true }; }
     // 3) a line just below the label (blank space under a heading)
     c = flat.filter(s => s.y < ly - fs * 0.5 && s.y > ly - 45 && s.x1 < lx1 + 10 && s.x2 > lx0).sort((a, b) => b.y - a.y)[0];
-    if (c) { const { w } = sizeFor(c.x2 - c.x1); return { x: Math.max(c.x1 + 4, lx0), y: c.y + 1.5, w }; }
+    if (c) { const { w } = sizeFor(c.x2 - c.x1); return { x: Math.max(c.x1 + 4, lx0), y: c.y + 1.5, w, onLine: true }; }
     // 4) no line: right of the label, sitting on its baseline
     const { w } = sizeFor(140);
     if (lx1 + 8 + w < vb[2] - 10) return { x: lx1 + 8, y: ly - 3, w };
