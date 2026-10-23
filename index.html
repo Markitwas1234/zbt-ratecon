@@ -873,7 +873,7 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
       drop.hidden = true; $("newPdf").hidden = false; $("signWork").hidden = false;
       if (spot) {
         place = spot.place; pageNum = place.page;
-        $("spotNote").textContent = "Placed on the “" + spot.label + "” line, page " + pageNum + ".";
+        $("spotNote").textContent = (spot.score < 4 ? "Best guess: the \u201c" : "Placed on the \u201c") + spot.label + "\u201d line, page " + pageNum + "." + (spot.score < 4 ? " Drag it if that's not right." : "");
       } else {
         pageNum = pdfDoc.numPages;
         const pg = await pdfDoc.getPage(pageNum), vb = pg.view, w = 150;
@@ -971,33 +971,53 @@ loadLog(); setInterval(() => { if ($("lockCard").hidden) loadLog(); }, 60000);
       let segs = null;
       for (const row of rows) {
         row.parts.sort((a, b) => a.x - b.x);
-        let text = "", map = [];
-        for (const p of row.parts) { const s0 = text.length; text += (text ? " " : "") + p.str; map.push([s0 + (s0 ? 1 : 0), text.length, p]); }
-        const at = idx => (map.find(([a, b]) => idx >= a && idx < b) || map[map.length - 1])[2];
-        const seen = new Set();
-        for (const [weight, re] of SIGN_WORDS) {
-          re.lastIndex = 0; let m;
-          while ((m = re.exec(text))) {
-            if (seen.has(m.index)) continue; seen.add(m.index);
-            const near = text.slice(Math.max(0, m.index - 30), m.index + m[0].length + 10);
-            let score = weight;
-            if (weight < 8 && /carrier|dispatch|driver|motor\s*carrier/i.test(text)) score += 3;   // carrier named on the same row
-            if (OTHER.test(near) && !/carrier|dispatch|driver/i.test(m[0])) score -= 9;          // the broker's/shipper's line
-            if (text.length > 110) score -= 5;                                                  // a paragraph that mentions signing
-            else if (text.length > 70) score -= 2;
-            if (NOT_A_SPOT.test(text.slice(0, m.index + m[0].length))) score -= 3;
-            if (score < 2) continue;
-            const first = at(m.index), lastP = at(m.index + m[0].length - 1);
-            const per = lastP.width / Math.max(1, lastP.str.length);
-            const endIdx = m.index + m[0].length - map.find(r => r[2] === lastP)[0];
-            const lx0 = first.x, lx1 = Math.min(lastP.x + lastP.width, lastP.x + per * endIdx), ly = row.y, fs = lastP.size;
-            if (!segs) segs = await horizontalLines(page, items);
-            const spot = pickLine(segs, lx0, lx1, ly, fs, page.view);
-            if (spot.onLine) score += 3;                                                        // there's an actual line to sign on
-            score += n * 0.05 + (800 - ly) * 0.0005;                                            // later page / lower on page wins ties
-            if (best && score < best.score) continue;
-            const label = m[0].replace(/_+/g, "").replace(/\s+/g, " ").replace(/[:\s]+$/, "").trim() || "signature";
-            best = { score, label: label.length > 40 ? label.slice(0, 40) + "…" : label, place: { page: n, x: spot.x, y: spot.y, w: spot.w } };
+        // Build the row's text one character at a time, remembering which piece and position each character came from.
+        let chars = [];   // {ch, p, i}
+        let prev = null;
+        for (const p of row.parts) {
+          if (prev) {
+            const gap = p.x - (prev.x + prev.width);
+            if (gap > Math.max(1.2, p.size * 0.18)) chars.push({ ch: " ", p: prev, i: prev.str.length });
+          }
+          for (let i = 0; i < p.str.length; i++) chars.push({ ch: p.str[i], p, i });
+          prev = p;
+        }
+        // Also try a version with letter-spacing squeezed out ("S i g n e d" -> "Signed")
+        const isL = c => c && /[A-Za-z]/.test(c.ch);
+        const squeezed = chars.filter((c, k) => !(c.ch === " " && isL(chars[k - 1]) && isL(chars[k + 1]) &&
+          ((chars[k - 2] || { ch: " " }).ch === " " || (chars[k + 2] || { ch: " " }).ch === " ")));
+        const versions = [chars];
+        if (squeezed.length !== chars.length) versions.push(squeezed);
+        for (const cs of versions) {
+          const text = cs.map(c => c.ch).join("");
+          const seen = new Set();
+          for (const [weight, re] of SIGN_WORDS) {
+            re.lastIndex = 0; let m;
+            while ((m = re.exec(text))) {
+              if (seen.has(m.index)) continue; seen.add(m.index);
+              const end = m.index + m[0].length;
+              // the label this word belongs to: back to the previous ":" / "_" / big gap, forward to the next ":" / "_"
+              const before = text.slice(0, m.index), labelStart = Math.max(before.lastIndexOf(":"), before.lastIndexOf("_"), before.lastIndexOf("   ")) + 1;
+              const ownLabel = text.slice(labelStart, end);
+              const after = text.slice(end, end + 6);
+              const looksLikeLabel = /^\s*(?:[:_(\-]|$)/.test(after) || /_{3,}/.test(text.slice(end, end + 30));
+              let score = weight;
+              if (weight < 8 && /carrier|dispatch|driver|motor\s*carrier/i.test(text)) score += 3;    // carrier named on the same row
+              if (OTHER.test(ownLabel) && !/carrier|dispatch|driver/i.test(m[0])) score -= 9;         // "Broker Signature", "Shipper sign"
+              if (!looksLikeLabel) { if (text.length > 110) score -= 5; else if (text.length > 70) score -= 2; }   // a sentence that only mentions signing
+              if (looksLikeLabel) score += 2;
+              if (NOT_A_SPOT.test(text.slice(0, end))) score -= 3;
+              const c0 = cs[m.index], c1 = cs[end - 1];
+              const per1 = c1.p.width / Math.max(1, c1.p.str.length), per0 = c0.p.width / Math.max(1, c0.p.str.length);
+              const lx0 = c0.p.x + per0 * c0.i, lx1 = Math.min(c1.p.x + c1.p.width, c1.p.x + per1 * (c1.i + 1)), ly = row.y, fs = c1.p.size;
+              if (!segs) segs = await horizontalLines(page, items);
+              const spot = pickLine(segs, lx0, lx1, ly, fs, page.view);
+              if (spot.onLine) score += 3;                                                        // there's an actual line to sign on
+              score += n * 0.05 + (800 - ly) * 0.0005;                                            // later page / lower on page wins ties
+              if (best && score < best.score) continue;
+              const label = m[0].replace(/_+/g, "").replace(/\s+/g, " ").replace(/[:\s]+$/, "").trim() || "signature";
+              best = { score, label: label.length > 40 ? label.slice(0, 40) + "…" : label, place: { page: n, x: spot.x, y: spot.y, w: spot.w } };
+            }
           }
         }
       }
